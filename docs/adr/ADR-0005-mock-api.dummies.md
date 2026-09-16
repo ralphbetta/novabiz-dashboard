@@ -50,6 +50,29 @@ requirement, and can't be reused inside component tests.
 
 **Stubbed modules** — fast to write, and hides the network entirely. See the trap above.
 
+## How the chaos controls actually work (built)
+
+There are sliders-worth of settings — latency, error rate, timeout rate, settlement failure rate — but
+the important idea is simpler:
+
+**Every failure happens either *before* or *after* the money moves.**
+
+- **Error before commit:** the server says "something broke", and no money moved.
+- **Timeout after commit:** the server takes the money, then doesn't reply in time. The app has no idea it
+  worked. **This is the scary one, and the one the whole reconciliation design exists for.**
+
+A normal "fail 10% of requests" setting can't tell those apart, which is why the controls pick a point.
+
+For the demo there's a "force the next transfer to…" option, so you can say *"watch, this next one will
+time out after it goes through"* and it will. Until the panel is built, open the browser console and run:
+
+```js
+novabizChaos.forceNextTransfer('timeout-after-commit')
+```
+
+It waits for a transfer that really goes through. If you retry an old one, or the transfer is refused
+(say, not enough money), it stays armed for the next one.
+
 ## Where the mock runs — a decision that changed
 
 **The mock runs in every build, not just in development.** An earlier draft only turned it on in

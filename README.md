@@ -14,7 +14,7 @@ view of money coming into the wallet, and a way to send money out. Built for the
 |---|---|---|
 | 0 | Scaffold, strict TypeScript, lint guards, test runner | ◐ Partly done |
 | 1 | Money module — kobo integers, formatting, parsing | ✅ Done |
-| 2 | MSW mock API — seeded ledger, pagination, idempotency, chaos controls | ◐ Parts 1–2 of 3: chaos controls remain |
+| 2 | MSW mock API — seeded ledger, pagination, idempotency, chaos controls | ◐ Mock API complete; chaos panel UI, saved settings and "Mock API" badge pending (need the Phase 3 store) |
 | 3 | Data layer — Redux Toolkit store, RTK Query endpoints | Not started |
 | 4 | Balance summary + virtualised transaction feed | Not started |
 | 5 | Send Money wizard | Not started |
@@ -47,6 +47,23 @@ npm run build       # Type-check and production build
 ```
 
 All five currently pass.
+
+## Trying the failure modes
+
+The mock API can be made slow, made to fail, or made to go silent — including *after* a transfer has
+gone through, which is the case the app's reconciliation exists for. Until the chaos panel is built,
+use the browser console while `npm run dev` is running:
+
+```js
+novabizChaos.forceNextTransfer('timeout-after-commit') // next transfer created goes through; reply held 60s
+novabizChaos.forceNextTransfer('error-before-commit')  // next transfer fails, nothing moves
+novabizChaos.forceNextSettlement('failed')             // next transfer is accepted, then fails to settle
+novabizChaos.update({ latencyMs: 2000, errorRate: 0.2 })
+novabizChaos.reset()
+```
+
+There is no UI to send a transfer yet (Phase 5), so for now these are exercised by the tests in
+`src/mocks/chaos.test.ts`. Full reference: [ADR-0005](docs/adr/ADR-0005-mock-api.md).
 
 ## What is built
 
@@ -145,6 +162,7 @@ src/api/contracts.ts         Zod API contract, shared by the app and the mock se
 src/mocks/seed.ts            Seeded data: 1,200 transactions, stable across time of day, incl. hostile fixtures
 src/mocks/db.ts              Mock server state and business rules: ledger, pagination, idempotency
 src/mocks/handlers.ts        Mock API HTTP layer (MSW)
+src/mocks/chaos.ts           Chaos controls: latency, errors, timeouts, forced outcomes
 src/mocks/browser.ts         Starts the mock as a service worker
 src/**/*.test.ts             Unit, property-based, contract, seed and lint-guard tests
 src/source-hygiene.test.ts   Fails on raw invisible, bidirectional or look-alike characters

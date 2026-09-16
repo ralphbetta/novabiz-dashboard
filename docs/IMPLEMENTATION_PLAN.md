@@ -172,7 +172,7 @@ without Intl V3 string input; and a lint guard with a test proving it fires.
 
 ---
 
-### Phase 2 — The mock server (≈4h) ⭐ — ◐ parts 1–2 of 3 done
+### Phase 2 — The mock server (≈4h) ⭐ — ◐ mock API complete; chaos panel UI, persisted settings and "Mock API" badge pending (need the Phase 3 store)
 
 **Part 1 — done: contracts and seed data.**
 - [src/api/contracts.ts](../src/api/contracts.ts) — Zod schemas for every endpoint. Wire (plain
@@ -205,7 +205,7 @@ without Intl V3 string input; and a lint guard with a test proving it fires.
 - **Verified:** unit tests on the db; `msw/node` tests on every endpoint's status codes and contract
   validity; production preview serves `mockServiceWorker.js`. **Not verified:** worker registration in
   a real browser — no browser runner exists until Phase 8.
-- **Found by mutation testing:** making every error claim `rejected: true` passed all tests, because
+- **Found by manual mutation checks** (see the note under Part 3): making every error claim `rejected: true` passed all tests, because
   nothing produced an `INTERNAL_ERROR`. That also exposed that a thrown exception returned MSW's
   non-contract 500 body. Both fixed and tested.
 
@@ -221,6 +221,41 @@ without Intl V3 string input; and a lint guard with a test proving it fires.
 - Seed keys are registered; pending seed rows settle; a throwing settlement outcome no longer strands a
   transfer or breaks reads; omitted and blank narration fingerprint identically.
 - Loading message from first paint and a 15s startup timeout; `msw` moved to `dependencies`.
+
+**Part 3 — done: chaos logic.**
+- [src/mocks/chaos.ts](../src/mocks/chaos.ts) — latency with jitter; error, timeout and settlement-failure
+  rates; and forced one-shot outcomes. Every injected write failure has a commit point, before or after
+  the write, because ADR-0006 depends on the difference.
+- Applied in `handlers.ts` with all awaiting before the db. A timeout holds the response for 60s, then
+  releases it: long past the client's 15s timeout, but finite, because a service-worker fetch event that
+  never settles can get the worker killed and switch the mock off.
+- A forced after-commit outcome stays armed until a transfer is actually created, so a replay or a
+  db rejection can't use it up without money moving.
+- Exposed as `window.novabizChaos` while the mock runs, for console demos now and Playwright later.
+- Tests: the API-level version of the key E2E scenario — a transfer times out after commit, the transfer
+  exists, and a same-key retry replays it with a single debit.
+- **How the "mutation checks" in this plan were run.** There is no mutation-testing tool in this repo. Each
+  check was manual: edit one rule in the source by hand to break it, run the test suite, confirm a test
+  fails, then restore the file. They show that specific rules are guarded, not that the suite is complete —
+  the second adversarial review found a gap they had missed (random draws per request, below). Counts are
+  deliberately not reported, since a reviewer cannot reproduce them from the repo.
+- **Fixed after adversarial review of Part 3**, each confirmed first by a failing test in the
+  "adversarial review of the chaos controls" block of `chaos.test.ts`:
+  - the "forcing doesn't shift the random sequence" guarantee was false for any POST that created nothing;
+    every request now draws exactly `ROLLS_PER_REQUEST` rolls;
+  - `update({ latency: 5000 })` silently did nothing; settings are now a strict schema;
+  - a random after-commit failure replaced real answers from requests that wrote nothing; it now applies
+    only when a transfer was created;
+  - an armed forced after-commit outcome switched the random rates off for other POSTs; it no longer does;
+  - `reset()` returned to the global defaults rather than the controller's own settings;
+  - added a test and ADR note for latency beyond the client timeout reproducing the in-flight race;
+  - renamed the handler helper `process` to `runWithChaos`, which no longer shadows Node's global.
+- **Not yet built, needs the Redux store:** panel UI, persisted settings, "Mock API" badge.
+- **Open decision for Phase 3 — two sources of truth.** ADR-0004 persists chaos settings in the
+  preferences slice, but the controller holds its own copy, and `novabizChaos.update()` bypasses Redux.
+  Recommended: the controller stays the runtime source of truth; the slice pushes into it with
+  `update()` on load (before the first request) and on change; the panel reads back with `getSettings()`
+  so console changes are not lost.
 
 **Open decision — mock bundle size.** ~523 kB minified / ~188 kB gzipped, awaited before first render,
 now shipped to production. Mostly zod (needed by the app anyway), msw, and MSW's unused cookie

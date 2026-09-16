@@ -41,18 +41,80 @@ The handlers implement a small **stateful in-memory server**, not canned respons
 
 ### The chaos controls
 
-A panel, present whenever the mock is on — so in a deployed demo too — exposes:
+Implemented in `src/mocks/chaos.ts`, applied by `handlers.ts`, and available whenever the mock is on —
+so in a deployed demo too. Until the panel exists (after Phase 3), they are driven from the browser
+console through `window.novabizChaos`.
 
-| Control | Range | Why it exists |
-|---|---|---|
-| Latency | 0–5000ms, with jitter | Makes loading states real |
-| Failure rate | 0–100% | The brief's explicit requirement |
-| Timeout rate | 0–100% | Produces the "no answer at all" case — distinct from failure |
-| Force next send to | success / fail / timeout / duplicate-key | Makes the demo deterministic on interview day |
+| Control | Range | Default | Why it exists |
+|---|---|---|---|
+| `latencyMs` + `jitterMs` | 0–30,000 ms each | 400 + up to 300 | Makes loading states real |
+| `errorRate` | 0–1 | 0 | The brief's explicit requirement: a `500 INTERNAL_ERROR`, `rejected: false` |
+| `timeoutRate` | 0–1 | 0 | The "no answer at all" case, distinct from an error: the client's own timeout must end it |
+| `afterCommitRate` | 0–1 | 0.5 | For injected write failures, the share that happen **after** the transfer is written |
+| `settlementFailureRate` | 0–1 | 0 | An accepted transfer that later fails to settle |
+| `forceNextTransfer(…)` | `success`, `error-before-commit`, `error-after-commit`, `timeout-before-commit`, `timeout-after-commit` | none | Makes the demo deterministic on interview day |
+| `forceNextSettlement(…)` | `successful`, `failed` | none | Same, for settlement |
 
-The last row matters: a probabilistic failure rate is untestable and undemonstratable. Being
-able to say "the next transfer will time out" and then show the reconciliation is the
-difference between claiming the behaviour works and showing it.
+**Why a commit point.** A plain failure rate cannot express the distinction ADR-0006 turns on. An error
+*before* commit means no money moved. A timeout *after* commit means money moved and the client was
+never told — the case reconciliation exists for, and the E2E test ADR-0011 calls the most important.
+So every injected write failure is placed before or after the write.
+
+**Why forced outcomes.** A probabilistic failure rate is untestable and undemonstratable. Being able to
+say "the next transfer will time out after it goes through" and then show the reconciliation is the
+difference between claiming the behaviour works and showing it. A forced transfer outcome is consumed
+only by a transfer POST, so balance, feed and status requests polled in between cannot use it up. An
+*after*-commit outcome goes further: it stays armed until a POST actually creates a transfer, so a
+replay, or a transfer the db rejects, cannot use it up without money moving. While it is armed, the
+random rates still apply to every other POST: a random before-commit failure stops that POST reaching the
+db, and the forced outcome waits for the next POST that does create a transfer. So with a non-zero error or
+timeout rate, a forced after-commit outcome may fire on a later POST than the one you meant — set the rates
+to zero for a deterministic demo. A forced settlement binds to the next transfer *created*, not whichever
+pending transfer settles first.
+
+The earlier draft's `duplicate-key` option was dropped: a same-key retry from the client already
+produces a replay, and a same-key request with a different body already produces
+`IDEMPOTENCY_KEY_REUSED`. Neither needs a forced outcome.
+
+**All awaiting happens before the db.** Latency, and a timeout or error *before* commit, are applied
+before the db call; an *after*-commit failure only discards the response. The db's check-then-write stays
+atomic. A request that fails validation is answered at once, with no latency or injected failure.
+
+**"After commit" means a transfer was actually written.** An after-commit failure — random or forced — is
+applied only to a POST that created a transfer. A request that wrote nothing keeps its real answer: a
+replay returns its `202`, and a db rejection returns its `422 INSUFFICIENT_FUNDS` with `rejected: true`.
+Replacing those with a `500` would be safe, since the client would reconcile rather than roll back, but it
+would make `afterCommitRate: 1` untrue to its own description.
+
+**Latency longer than the client's timeout reproduces the in-flight race.** Settings allow up to 30s of
+latency plus 30s of jitter, well past the client's 15s timeout (ADR-0014). With that, the client gives up,
+its reconciliation lookup gets a `404`, and only then does the transfer commit — exactly the sequence in
+ADR-0006's "Why a miss is not an answer". It is a more realistic demonstration of that race than any forced
+outcome, and `chaos.test.ts` covers it.
+
+**A timeout is long, not endless.** It holds the response for `TIMEOUT_HOLD_MS` (60s) — well past the
+client's 15s request timeout (ADR-0014) — then releases it. It is not held forever because the mock is a
+service worker: a fetch event that never settles can get the worker terminated by the browser, and MSW's
+worker then forgets its clients and lets every request through to the real network, silently switching
+the mock off. A before-commit timeout releases a 500, since nothing was written.
+
+**Random draws are fixed per request.** Every request draws exactly `ROLLS_PER_REQUEST` (five) rolls —
+read or write, forced or not, and whether or not it goes on to create a transfer. With a seeded random
+source, nothing about one request shifts which later requests the rates hit. An earlier version drew the
+settlement roll only when a transfer was created, so a replay, a db rejection or a before-commit failure
+drew one roll fewer and shifted every later roll; the per-request count is now tested for each of those.
+
+**Settings are strict.** `update()` and the constructor throw on an out-of-range value *or an unknown key*.
+They are typed by hand in the browser console, where `update({ latency: 5000 })` for `latencyMs` would
+otherwise return normally and change nothing.
+
+`reset()` restores the settings the controller was **created with** — the defaults plus any overrides — and
+clears anything forced. In the browser those are the defaults; a test that builds a controller with custom
+settings gets its own back. It keeps settlement outcomes already fixed for existing transfers, since those
+were decided when the transfers were created.
+
+*Not yet built:* the panel UI, persisting the settings, and the visible "Mock API" badge — these need the
+Redux store from Phase 3.
 
 ## Alternatives considered
 

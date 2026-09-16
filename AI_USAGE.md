@@ -244,6 +244,15 @@ transaction row could show the same amount differently.
   review. It also revealed that an unexpected exception returned MSW's generic 500, whose body did not
   match the error contract. **Fix:** an error boundary on every handler, and a test driving a crash
   through each endpoint.
+- **A documented guarantee that the code did not keep, and silent failure where the docs promised
+  otherwise.** The chaos controls' code and ADR-0005 promised that forcing an outcome could not shift which
+  later requests the random rates hit. It could, for any POST that created nothing, because the settlement
+  roll was drawn only on creation. A test covered only two POSTs that both created a transfer, so it could
+  not see the gap. Separately, `update()` was documented as throwing rather than silently mishandling
+  input, yet `update({ latency: 5000 })` returned normally and changed nothing. Both caught by the second
+  adversarial review; each confirmed by a failing test, which for the random-draw case showed the per-request
+  counts varying between 4 and 5. Manual mutation checks run earlier had not found it, so the plan no longer
+  reports mutation counts as if they were evidence of completeness.
 - **A stale code sample.** The implementation plan's Phase 1 section still held the buggy fallback
   from §3.1 after the source was fixed. The sample was removed and replaced with links to the real
   files.

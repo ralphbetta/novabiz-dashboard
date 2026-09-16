@@ -18,6 +18,7 @@ import {
   type ApiErrorWire,
   type ErrorCode,
 } from '../api/contracts'
+import { TIMEOUT_HOLD_MS, type ChaosController, type ChaosFailure } from './chaos'
 import type { MockDb, Result } from './db'
 
 /** Set on every transfer response: whether this request replayed an earlier one with the same key. */
@@ -78,25 +79,70 @@ function withErrorBoundary(resolver: HttpResponseResolver): HttpResponseResolver
 
 export interface HandlerOptions {
   /**
-   * Awaited after a request is parsed and before the db is called. Part 3's simulated latency plugs in
-   * here, which keeps any await out of the db's check-then-write. Tests use it to hold a request "in
+   * Awaited after a request is parsed and before the db is called. Tests use it to hold a request "in
    * flight" deterministically.
    */
   beforeProcessing?: (request: Request) => Promise<void>
+  /** Latency, injected errors and timeouts. Absent means a fast, perfectly reliable server. */
+  chaos?: ChaosController
 }
 
-export function createHandlers(db: MockDb, { beforeProcessing }: HandlerOptions = {}) {
-  return [
-    http.get(`*${API.balance}`, withErrorBoundary(async ({ request }) => {
-      await beforeProcessing?.(request)
-      return fromResult(db.getBalance())
-    })),
+const simulatedError = () =>
+  errorResponse('INTERNAL_ERROR', 'Simulated server error. Check the transfer status before retrying.')
 
-    http.get(`*${API.transactions}`, withErrorBoundary(async ({ request }) => {
+/** What the db step produced: the response, and the id of the transfer if this request created one. */
+interface Processed {
+  response: Response
+  createdTransferId?: string
+}
+
+export function createHandlers(db: MockDb, { beforeProcessing, chaos }: HandlerOptions = {}) {
+  /**
+   * An injected failure. An error answers 500 at once. A timeout holds `response` for TIMEOUT_HOLD_MS —
+   * long after the client has given up — then releases it: see chaos.ts for why it is not held forever.
+   */
+  async function inject(failure: ChaosFailure, response: Response): Promise<Response> {
+    if (failure.kind === 'error') return simulatedError()
+    await chaos?.sleep(TIMEOUT_HOLD_MS)
+    return response
+  }
+
+  /**
+   * Every request that passes validation runs through here, in this order. A request that fails
+   * validation is answered at once, with no latency or injected failure.
+   *   1. hold (test gate) and simulated latency — all awaiting happens BEFORE the db, see db.ts;
+   *   2. a failure injected before commit: nothing is written;
+   *   3. the db call;
+   *   4. a failure injected after commit — only if this request created a transfer. The write stands,
+   *      and the client never learns the outcome. A request that wrote nothing (a read, a replay, a db
+   *      rejection) is never given an after-commit failure: its real answer, such as a 422 with
+   *      `rejected: true`, is returned as-is.
+   */
+  async function runWithChaos(request: Request, isTransferWrite: boolean, run: () => Processed): Promise<Response> {
+    await beforeProcessing?.(request)
+    const decision = chaos?.decide(isTransferWrite) ?? { delayMs: 0, failure: null, settlementRoll: 0 }
+    if (decision.delayMs > 0 && chaos) await chaos.sleep(decision.delayMs)
+
+    if (decision.failure?.when === 'before-commit') return inject(decision.failure, simulatedError())
+
+    const { response, createdTransferId } = run()
+    if (createdTransferId === undefined || !chaos) return response
+
+    // A forced after-commit outcome, if armed, takes precedence over a random one.
+    const forced = chaos.onTransferCreated(createdTransferId, decision.settlementRoll)
+    const afterCommit = forced ?? (decision.failure?.when === 'after-commit' ? decision.failure : null)
+    return afterCommit ? inject(afterCommit, response) : response
+  }
+
+  return [
+    http.get(`*${API.balance}`, withErrorBoundary(({ request }) =>
+      runWithChaos(request, false, () => ({ response: fromResult(db.getBalance()) })),
+    )),
+
+    http.get(`*${API.transactions}`, withErrorBoundary(({ request }) => {
       const query = TransactionQuerySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams))
       if (!query.success) return validationError(query.error, 'Invalid transaction query')
-      await beforeProcessing?.(request)
-      return fromResult(db.listTransactions(query.data))
+      return runWithChaos(request, false, () => ({ response: fromResult(db.listTransactions(query.data)) }))
     })),
 
     http.post(`*${API.transfers}`, withErrorBoundary(async ({ request }) => {
@@ -106,8 +152,6 @@ export function createHandlers(db: MockDb, { beforeProcessing }: HandlerOptions 
           [IDEMPOTENCY_HEADER]: 'Must be a UUID',
         })
       }
-
-      // Everything that awaits happens here, before the db is touched. See the note in db.ts.
       let body: unknown
       try {
         body = await request.json()
@@ -116,30 +160,36 @@ export function createHandlers(db: MockDb, { beforeProcessing }: HandlerOptions 
       }
       const parsed = SendMoneyRequestSchema.safeParse(body)
       if (!parsed.success) return validationError(parsed.error, 'Invalid transfer')
-      await beforeProcessing?.(request)
 
-      const result = db.createTransfer(parsed.data, key.data)
-      if (!result.ok) return errorResponse(result.code, result.message, result.fieldErrors)
-      // 202 for both the original and a replay: the same request gets the same status. The header
-      // distinguishes them, and the body carries the transfer's current state.
-      return HttpResponse.json(
-        { transfer: result.value.transfer },
-        { status: 202, headers: { [REPLAYED_HEADER]: String(result.value.replayed) } },
-      )
+      return runWithChaos(request, true, () => {
+        const result = db.createTransfer(parsed.data, key.data)
+        if (!result.ok) return { response: errorResponse(result.code, result.message, result.fieldErrors) }
+        const { transfer, replayed } = result.value
+        // 202 for both the original and a replay: the same request gets the same status. The header
+        // distinguishes them, and the body carries the transfer's current state.
+        const response = HttpResponse.json(
+          { transfer },
+          { status: 202, headers: { [REPLAYED_HEADER]: String(replayed) } },
+        )
+        return replayed ? { response } : { response, createdTransferId: transfer.id }
+      })
     })),
 
-    http.get(`*${API.transfers}`, withErrorBoundary(async ({ request }) => {
+    http.get(`*${API.transfers}`, withErrorBoundary(({ request }) => {
       const key = IdempotencyKeySchema.safeParse(new URL(request.url).searchParams.get('idempotencyKey'))
       if (!key.success) {
         return errorResponse('VALIDATION_FAILED', 'A valid idempotencyKey query parameter is required', {
           idempotencyKey: 'Must be a UUID',
         })
       }
-      await beforeProcessing?.(request)
-      const result = db.findTransferByKey(key.data)
-      return result.ok
-        ? HttpResponse.json({ transfer: result.value })
-        : errorResponse(result.code, result.message, result.fieldErrors)
+      return runWithChaos(request, false, () => {
+        const result = db.findTransferByKey(key.data)
+        return {
+          response: result.ok
+            ? HttpResponse.json({ transfer: result.value })
+            : errorResponse(result.code, result.message, result.fieldErrors),
+        }
+      })
     })),
   ]
 }
