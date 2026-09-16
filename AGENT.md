@@ -15,7 +15,7 @@ encode a specific bug that was caught during development.
 
 ## Project in one paragraph
 
-React 18 + TypeScript + Vite dashboard for a small merchant on the NovaBiz module of FirstBank
+React 19 + TypeScript + Vite dashboard for a small merchant on the NovaBiz module of FirstBank
 NovaPay. State is **Redux Toolkit + RTK Query** in a single store; styling is Tailwind; E2E is
 Playwright. It shows a wallet balance and transaction feed, and provides a multi-step Send Money
 flow. There is no backend — MSW provides a stateful in-memory API. Target users are on low-end
@@ -33,12 +33,21 @@ changing the thing it covers.**
 - Money is typed `Kobo` (a branded number). Never a plain `number`, never a `string`, never a
   float.
 - **All arithmetic is on integers.** Sums, totals, differences. No exceptions.
-- `/ 100` and `* 100` appear **only** inside `src/lib/money.ts`. Anywhere else is a bug — CI
-  greps for it.
+- `/ 100`, `* 100` and `.toFixed()` appear **only** inside `src/lib/money*.ts`. ESLint
+  `no-restricted-syntax` fails the build on them anywhere else, and `money.lint.test.ts` proves the
+  rule fires. **Do not add an `eslint-disable` to get past it.**
+- The branded `Kobo` type does **not** stop `amount / 100` — a Kobo is still a number. The lint
+  rule is the guard. Don't reason that "the types will catch it"; they won't.
 - Formatting happens **only** via `formatNaira()`. Not `toLocaleString`, not template literals,
   not `.toFixed(2)`, not string slicing.
 - Parsing merchant input happens **only** via `parseNairaInput()`. Never `parseFloat(x) * 100` —
-  that reintroduces the float.
+  that reintroduces the float. It is a parser, **not** a validator: it accepts zero and negatives.
+  The Send Money schema **must** carry an explicit `> 0` rule, independent of the ₦100 minimum,
+  with tests for `0` and negatives. Nothing else in the app rejects them.
+- Transaction rows use `formatSignedNaira(magnitude, direction)`. It takes a **non-negative**
+  magnitude and throws otherwise. Never `Math.abs` an amount to make it stop throwing — the throw
+  is reporting a real sign mismatch.
+- Negatives use hyphen-minus (U+002D) everywhere. Do not introduce U+2212 in display code.
 
 **If you are about to write `amount / 100` in a component, stop.** → `docs/adr/ADR-0002-money-formatting.md`
 
@@ -81,7 +90,8 @@ boolean.** The `unknown` state is the entire point. → `docs/adr/ADR-0006-optim
 
 ### 5. All merchant- and counterparty-supplied text is untrusted.
 
-- **No `dangerouslySetInnerHTML`.** ESLint `react/no-danger` is set to error. Do not disable it.
+- **No `dangerouslySetInnerHTML`.** An ESLint `no-restricted-syntax` rule fails the build on it,
+  with a test proving it fires. Do not disable it.
 - Descriptions and counterparty names pass through `sanitizeText()` at the API boundary —
   which strips control characters, zero-width characters, and **bidirectional overrides**. React
   escaping does not handle bidi, and bidi is a spoofing vector in a payments UI.
@@ -146,15 +156,18 @@ explaining the invariant. No `@ts-expect-error` without a linked issue.
 ## Commands
 
 ```bash
-npm run dev        # Vite + MSW worker
-npm test           # Vitest unit + component
-npm run test:ui    # Vitest UI
-npm run e2e        # Playwright, 360px and 1440px projects
-npm run lint       # ESLint incl. jsx-a11y and no-danger
-npm run typecheck  # tsc --noEmit
+npm run dev         # Vite dev server
+npm test            # Vitest, run once
+npm run test:watch  # Vitest, watch mode
+npm run lint        # ESLint, incl. the money and dangerouslySetInnerHTML guards
+npm run typecheck   # tsc
 ```
 
+Not yet wired — do not assume these exist: `npm run e2e` (Playwright, Phase 8), MSW in
+`npm run dev` (Phase 2), `eslint-plugin-jsx-a11y` (Phase 4).
+
 Before proposing a change as complete, run `npm run lint && npm run typecheck && npm test`.
+Report what those commands actually printed.
 Do not report a task as done on the strength of the code looking right.
 
 ---

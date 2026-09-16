@@ -1,4 +1,4 @@
-# ADR 0001 — Vite + React 18 + TypeScript as the application shell
+# ADR 0001 — Vite + React 19 + TypeScript as the application shell
 
 **Status:** Accepted · **Date:** 2026-09-16
 
@@ -14,8 +14,13 @@ to be quick on a low-end Android phone on a poor connection.
 
 ## Decision
 
-Use **Vite 5 + React 18 + TypeScript in `strict` mode**, as a pure client-side SPA. No
+Use **Vite 8 + React 19 + TypeScript 6 in `strict` mode**, as a pure client-side SPA. No
 Next.js, no SSR, no meta-framework.
+
+The scaffold enables the **React Compiler**, which auto-memoises. That changes ADR-0008's
+re-render story: manual `memo` / `useMemo` on feed rows is largely redundant, so we profile
+first and only hand-memoise where the compiler demonstrably bails out — rather than
+scattering memoisation on faith and claiming it as optimisation work.
 
 ## Alternatives considered
 
@@ -40,9 +45,10 @@ rendering model.
 marketing surface or needed server-side session handling, this decision would be revisited.
 We accept that cost because it is outside the scope of this dashboard.
 
-*TypeScript `strict`* is on, including `noUncheckedIndexedAccess`. This matters more than
-usual here: the money type in ADR 0002 depends on the compiler actually enforcing a branded
-type, which it will not do under loose settings.
+*TypeScript `strict`* is on, together with `noUncheckedIndexedAccess` and
+`exactOptionalPropertyTypes`. This matters more than usual here: the money type in ADR-0002
+depends on the compiler actually enforcing a branded type, which it will not do under loose
+settings. Note the Vite template does **not** set these — they were added deliberately.
 
 ## How we would know we were wrong
 

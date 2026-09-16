@@ -1,0 +1,64 @@
+import js from '@eslint/js'
+import globals from 'globals'
+import reactHooks from 'eslint-plugin-react-hooks'
+import reactRefresh from 'eslint-plugin-react-refresh'
+import tseslint from 'typescript-eslint'
+import { defineConfig, globalIgnores } from 'eslint/config'
+
+/**
+ * Money guard — ADR-0002. The branded Kobo type cannot stop `{amount / 100}` in a component,
+ * because a Kobo is still a number. This rule is the thing that does. It is scoped off only
+ * for the money module itself.
+ *
+ * KNOWN GAPS — this is a syntax match, not data-flow analysis, so it cannot see:
+ *   const K = 100; amount / K      (the divisor is an identifier, not a literal)
+ *   amount / 10 / 10               (no single operand is 100)
+ * money.lint.test.ts pins both as uncaught, so any claim of wider coverage fails a test.
+ */
+const MONEY_MESSAGE =
+  'Kobo↔naira conversion is only allowed in src/lib/money*.ts. Use formatNaira / parseNairaInput. See ADR-0002.'
+export const moneyGuard = [
+  { selector: "BinaryExpression[operator='/'][right.value=100]", message: MONEY_MESSAGE },
+  { selector: "BinaryExpression[operator='*'][right.value=100]", message: MONEY_MESSAGE },
+  { selector: "BinaryExpression[operator='*'][left.value=100]", message: MONEY_MESSAGE },
+  { selector: "AssignmentExpression[operator='/='][right.value=100]", message: MONEY_MESSAGE },
+  { selector: "AssignmentExpression[operator='*='][right.value=100]", message: MONEY_MESSAGE },
+  { selector: "BinaryExpression[operator='*'][right.value=0.01]", message: MONEY_MESSAGE },
+  { selector: "BinaryExpression[operator='*'][left.value=0.01]", message: MONEY_MESSAGE },
+  { selector: "BinaryExpression[operator='/'][right.value=0.01]", message: MONEY_MESSAGE },
+  {
+    selector: "CallExpression[callee.property.name='toFixed']",
+    message: '.toFixed() formats via float rounding. Use formatNaira. See ADR-0002.',
+  },
+]
+
+/** Untrusted text guard — ADR-0013. Needs no React plugin: it matches the JSX attribute. */
+const noDangerousHtml = {
+  selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",
+  message: 'Rendering HTML from data is banned. All descriptions are untrusted. See ADR-0013.',
+}
+
+export default defineConfig([
+  globalIgnores(['dist', 'coverage']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      js.configs.recommended,
+      tseslint.configs.recommended,
+      reactHooks.configs.flat.recommended,
+      reactRefresh.configs.vite,
+    ],
+    languageOptions: {
+      globals: globals.browser,
+    },
+    rules: {
+      'no-restricted-syntax': ['error', ...moneyGuard, noDangerousHtml],
+    },
+  },
+  {
+    files: ['src/lib/money.ts', 'src/lib/money.internal.ts', 'src/lib/money*.test.ts'],
+    rules: {
+      'no-restricted-syntax': ['error', noDangerousHtml],
+    },
+  },
+])

@@ -8,7 +8,11 @@ Send Money is four steps: recipient → amount → review → confirm. Each step
 validation rules, each must be keyboard-operable, and errors must be announced to assistive
 technology rather than merely coloured red.
 
-The amount field is the interesting one. A merchant types `1,000.50`. That string must become
+The amount field is the interesting one. Note that `parseNairaInput` (ADR-0002) is a parser, not
+a validator: it deliberately returns `0` for `"0"` and a negative number for `"-5"`. **This
+form is therefore the only thing standing between a merchant and a zero or negative transfer**,
+and must reject both explicitly — not by accident of the ₦100 minimum, which would silently stop
+covering zero if the minimum were ever lowered to it. A merchant types `1,000.50`. That string must become
 the integer `100050` without a float ever existing (ADR 0002), and must be rejected if it
 exceeds the available balance, falls below the ₦100 minimum, or carries more than two decimal
 places.

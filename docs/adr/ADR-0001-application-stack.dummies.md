@@ -9,7 +9,11 @@ React app, but which flavour? Next.js is the default everyone reaches for in 202
 
 ## What I did
 
-Plain **Vite + React 18 + TypeScript**, client-side only. No Next.js, no server-rendering.
+Plain **Vite 8 + React 19 + TypeScript 6**, client-side only. No Next.js, no server-rendering.
+
+The scaffold turns on the **React Compiler**, which memoises automatically. Worth mentioning:
+it means I don't scatter `memo` and `useMemo` around and call it performance work — I profile
+and only hand-memoise where the compiler actually bails out.
 
 ## Why not the obvious alternative
 

@@ -24,7 +24,8 @@ Weight the tests by **what breaks a merchant's money**, not by what's easy to te
    balance must **NOT** be restored, reconciliation resolves it.
 4. **Retry doesn't double-send** — force a timeout, tap Try again, assert the ledger has
    **exactly one** entry.
-5. **Round-trip property test** — `toKobo(format(k)) === k` for 10,000 random values.
+5. **Two property tests on the money code** — `parseNairaInput(formatNaira(k)) === k` over
+   10,000 random amounts, and "the old-phone fallback agrees with the main path" over 5,000.
 
 ### Test 3 is the crown jewel
 
@@ -33,10 +34,16 @@ reconciliation logic back into the naive snapshot-and-restore — including a fu
 copying the RTK Query docs in good faith. It's how the reasoning in
 [ADR-0006](ADR-0006-optimistic-send.dummies.md) survives the next refactor.
 
-### Test 5 earns its keep
+### Test 5 already earned its keep
 
-A property test throws 10,000 random values at the money code. It catches the edge cases **I
-didn't think to enumerate** — which, by definition, are the ones I'd otherwise ship.
+Property tests throw thousands of random values at the money code, catching the edge cases **I
+didn't think to enumerate** — by definition, the ones I'd otherwise ship.
+
+This isn't hypothetical. The **fallback-agreement** test (5,000 runs) failed on its first run and
+found a real one-kobo bug above ₦10 trillion. Every hand-written case had used small amounts.
+
+**Know which test found it.** The round-trip test couldn't have: on a modern engine it never runs
+the fallback code at all. A test only checks the code it actually executes — that's worth saying.
 
 ## What I deliberately don't test
 

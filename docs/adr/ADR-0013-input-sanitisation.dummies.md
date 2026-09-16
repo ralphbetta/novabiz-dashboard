@@ -19,8 +19,8 @@ That's the interesting attack, and "sanitise the merchant's own note" doesn't co
 ## What I did
 
 **1. Let React escape everything.** All this text renders as a plain JSX text child. There is
-**no `dangerouslySetInnerHTML` anywhere**, and ESLint's `react/no-danger` is set to *error*, so
-adding one breaks the build instead of getting a review comment. No rich text is needed
+**no `dangerouslySetInnerHTML` anywhere**, and an ESLint rule fails the build if anyone adds
+one — with a test proving the rule actually fires. No rich text is needed
 anywhere, so this costs nothing.
 
 **2. Normalise at the API boundary** — one place, not at every render. Strip control characters,

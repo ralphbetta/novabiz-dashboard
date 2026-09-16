@@ -27,13 +27,23 @@ Weight the effort by blast radius. What breaks a merchant's money gets the most 
 | `-250000` | `-₦2,500.00` |
 | `99` | `₦0.99` — never `₦1.00` |
 | `100` | `₦1.00` |
-| `Number.MAX_SAFE_INTEGER` | formats without precision loss |
+| `Number.MAX_SAFE_INTEGER` | `₦90,071,992,547,409.91`, no precision loss |
 | `MAX_SAFE_INTEGER + 1` as a sum | throws rather than silently drifting |
-| Round-trip | `toKobo(formatNaira(k)) === k` for random `k` (fast-check, 10k cases) |
-| Fallback path | numeric-input formatter agrees with string-input formatter across the range |
+| `formatSignedNaira(-x, 'credit')` | throws — no silently hidden sign mismatch |
+| `"1,0,0,0"`, `"1,00.50"`, `"10 00"` | parser rejects malformed grouping |
+| Round-trip property | `parseNairaInput(formatNaira(k)) === k` — fast-check, **10,000** runs |
+| Fallback-agreement property | old-WebView fallback === primary path — fast-check, **5,000** runs |
+| Locale fallback | formatting under `en` / `und` still renders `₦`, not `NGN` |
+| Lint guard | `/ 100`, `* 100`, `.toFixed()`, `dangerouslySetInnerHTML` actually fail lint |
 
-The round-trip property test is the one that catches the class of bug the brief names,
-including the variants nobody thought to enumerate.
+The two properties guard different things, and it matters which is which. The **round-trip**
+guards format and parse against each other. The **fallback-agreement** property is the one that
+caught a real bug: the first fallback was one kobo out above ~₦10 trillion. The round-trip could
+not have found it, because on an engine with Intl V3 string input — Node included — it never
+reaches the fallback. A property only tests the code path it actually executes.
+
+The lint-guard test exists because ADR-0002's drift protection *is* a lint rule; a rule whose
+selector silently stops matching is worse than no rule, since everyone still believes in it.
 
 **`isDefiniteFailure`** — the classifier from ADR 0006, across every error shape the mock can
 produce. A `500` must classify as *not* definite; a `422` must classify as definite. Getting

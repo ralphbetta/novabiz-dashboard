@@ -144,78 +144,31 @@ out loud if a panellist spots the name and assumes two data layers.
 
 ## 3. Phased build
 
-### Phase 0 — Foundation (≈1.5h)
+### Phase 0 — Foundation (≈1.5h) — ◐ partly done
 
-Scaffold Vite. Turn on TypeScript `strict` **plus `noUncheckedIndexedAccess`** — ADR 0002's
-branded type needs it. Tailwind with `darkMode: 'class'`. ESLint with `jsx-a11y` and
-`react/no-danger: error`. Vitest + RTL + jsdom. Playwright config with 360px and 1440px
-projects. Commit.
+**Done:** Vite 8 + React 19 + TS 6 scaffold (React Compiler enabled). `strict`,
+`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`. ESLint `no-restricted-syntax` guards for
+kobo conversion and `dangerouslySetInnerHTML`. Vitest.
 
-**Done when:** `npm run dev`, `npm test`, and `npm run e2e` all execute on an empty app.
+**Still to do, when first needed:** Tailwind (Phase 4), RTL + jsdom (Phase 4),
+`eslint-plugin-jsx-a11y` (Phase 4), Playwright with 360px / 1440px projects (Phase 8).
+Replace the Vite template README and remove the demo assets.
 
 ---
 
-### Phase 1 — `money.ts` (≈2h) ⭐
+### Phase 1 — `money.ts` (≈2h) ⭐ — ✅ done
 
-**Build this before anything that displays a number.**
+See [src/lib/money.ts](../src/lib/money.ts), [src/lib/money.internal.ts](../src/lib/money.internal.ts)
+and ADR-0002. **This section deliberately contains no code sample** — an earlier version of this
+plan held one, and it went stale: its fallback path had the one-kobo bug above ₦10 trillion that
+the property tests later caught. The source files are the reference.
 
-```ts
-// src/lib/money.ts
-export type Kobo = number & { readonly __brand: unique symbol };
+**What shipped:** branded `Kobo`; `toKobo` / `isKobo`; `formatNaira` / `formatAmount` /
+`formatSignedNaira`; strict-grouping `parseNairaInput`; overflow-checked `addKobo` /
+`subtractKobo` / `sumKobo`; `narrowSymbol` for reduced-ICU locales; an exact fallback for engines
+without Intl V3 string input; and a lint guard with a test proving it fires.
 
-export const toKobo = (n: number): Kobo => {
-  if (!Number.isSafeInteger(n)) throw new RangeError(`Not a safe kobo integer: ${n}`);
-  return n as Kobo;
-};
-
-const formatter = new Intl.NumberFormat('en-NG', {
-  style: 'currency', currency: 'NGN',
-  minimumFractionDigits: 2, maximumFractionDigits: 2,
-});
-
-// Feature-detect Intl.NumberFormat V3 string input, once.
-// Pre-V3 engines coerce the argument with ToNumber, so a value that survives as a
-// string but loses precision as a double is the only thing that distinguishes them.
-const supportsStringInput = (() => {
-  try {
-    const probe = new Intl.NumberFormat('en-US', { useGrouping: false });
-    return probe.format('1234567890123456789' as never) === '1234567890123456789';
-  } catch { return false; }
-})();
-
-export function formatNaira(kobo: Kobo): string {
-  const sign  = kobo < 0 ? '-' : '';
-  const abs   = Math.abs(kobo);
-  const whole = Math.trunc(abs / 100);      // exact — abs is a safe integer
-  const rest  = abs % 100;                  // exact — integer remainder
-  return supportsStringInput
-    ? formatter.format(`${sign}${whole}.${String(rest).padStart(2, '0')}` as never)
-    : formatter.format(Number(`${sign}${whole}.${String(rest).padStart(2, '0')}`));
-}
-
-export function parseNairaInput(input: string): Kobo | null {
-  const cleaned = input.replace(/[₦,\s]/g, '').trim();
-  const m = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(cleaned);
-  if (!m) return null;
-  const [, sign, whole, frac = ''] = m;
-  const kobo = Number(whole) * 100 + Number(frac.padEnd(2, '0'));
-  if (!Number.isSafeInteger(kobo)) return null;
-  return toKobo(sign === '-' ? -kobo : kobo);
-}
-
-export function sumKobo(values: readonly Kobo[]): Kobo {
-  return toKobo(values.reduce<number>((a, b) => {
-    const next = a + b;
-    if (!Number.isSafeInteger(next)) throw new RangeError('Kobo sum overflow');
-    return next;
-  }, 0));
-}
-```
-
-Write `money.test.ts` **in the same sitting** — the full table from ADR 0011 plus the
-`fast-check` round-trip property.
-
-**Done when:** every case in ADR 0011's table passes, including the 10,000-case property test.
+**Open item:** verify `₦` rendering and `formatToParts` support on a real low-end Android WebView.
 
 ---
 
@@ -225,7 +178,7 @@ This is a bigger investment than it looks, and it pays back in every later phase
 
 **`seed.ts`** — 1,200 transactions from a fixed seed (a small LCG PRNG, no dependency), spread
 over 90 days, realistic Nigerian merchant descriptions. Include the **hostile rows** from ADR
-0013: a `<script>` tag, an RTL override (`‮`), zero-width joiners, a 5,000-char
+0013: a `<script>` tag, an RTL override (`U+202E`), zero-width joiners, a 5,000-char
 description, an empty description, an emoji-only one.
 
 **`db.ts`** — in-memory ledger, balance derived by folding it, plus a `Map<idempotencyKey,
@@ -315,6 +268,12 @@ the naive version first is genuinely useful: the Phase 6 diff *is* the explanati
 and it's a good thing to have in the history when you walk the panel through it.
 
 **Done when:** you can send money, the row appears immediately, and it settles.
+
+**Also done when — required, not optional:** the amount schema has its own explicit rule that the
+amount is **greater than zero**, separate from the ₦100 minimum, with component tests submitting
+`0`, `0.00`, `-5` and `-₦1,000.00` and asserting each is rejected with an announced error.
+`parseNairaInput` accepts all four by design (ADR-0002), so if this check is missing, nothing else
+stops them.
 
 ---
 

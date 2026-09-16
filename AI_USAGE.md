@@ -1,180 +1,215 @@
-# AI_USAGE.md
+# AI usage
 
-> **⚠ THIS IS A SCAFFOLD, NOT A SUBMISSION.**
->
-> Sections marked **`⚠ FILL IN`** contain placeholder text describing what to write. Replace
-> them with what actually happened as you build. Do not submit invented prompts or invented
-> bugs — the brief is assessing judgement, and a fabricated "here's where AI was wrong" is both
-> detectable and the worst possible signal in a hiring process.
->
-> **Keep this file open while you work.** Paste prompts in as you send them. This is
-> unreconstructable after the fact — three days later you will not remember the exact wording
-> of the prompt that produced the bad rollback code.
->
-> Delete this entire block before submitting.
+AI wrote most of the first drafts in this repository: the ADRs, the plan, `AGENT.md`, and the money
+module and its tests. It also got a number of things wrong, some of them confidently and in ways
+that would have shipped. This file records what I used it for, what I asked, and — in more detail —
+where it was wrong and how each error was caught.
 
----
+The pattern across those errors: the generated **code** was mostly caught by tests, while the
+generated **documentation** repeatedly claimed more than the code did. An independent review pass
+found almost all of the second kind. The model's own checks did not.
 
-## 1. Tools used
+## 1. Tools
 
 | Tool | Used for |
 |---|---|
-| **Claude (Opus, via Claude Code)** | Architecture planning, the ADR set in `docs/adr/`, `AGENT.md`, and this plan. Reviewing my optimistic-update logic against failure modes I hadn't enumerated. |
-| ⚠ FILL IN — e.g. **GitHub Copilot** | Inline completion for MSW handlers, Tailwind class strings, test boilerplate |
-| ⚠ FILL IN — e.g. **ChatGPT** | One-off questions (`Intl.NumberFormat` string-input support, `aria-rowindex` semantics in virtualised lists) |
+| **Claude Code** (Claude Opus 5), in VS Code | Breaking down the brief; drafting the 15 ADRs, their plain-English companions, the implementation plan and `AGENT.md`; writing `src/lib/money.ts` and its tests; applying review fixes. |
+| ⚠ **Name the reviewer:** tool or person | Two adversarial review passes over the money module and docs. Found most of the issues in §3. |
 
-**Where I did not use AI:** ⚠ FILL IN. *(Honest answers here are strong. Something like: "I
-wrote the reconciliation state machine by hand after rejecting two generated versions — the
-logic is subtle enough that I wanted to be certain I understood every branch, since I'll be
-defending it live.")*
+**Where I did not use AI:** I scaffolded the Vite app myself, and interrupted the agent to do it. I
+chose the state-management stack myself, after rejecting the one the model had picked for me (§3.2).
 
----
+## 2. Prompts
 
-## 2. Concrete prompts
+Quoted verbatim, typos included.
 
-### Prompt 1 — ⚠ FILL IN: the money formatting one
+### Prompt 1 — understanding the brief
 
-**What I asked:**
+> I need you to give me a breakdown of what this assessment is about and all that is expected of
+> me without missing any … in plain terms
 
-```
-⚠ Paste your actual prompt.
-```
+**What came back:** a structured breakdown of the five functional requirements, the five hard
+constraints, deliverables, stretch goals and scoring criteria. It usefully flagged that the
+idempotency key must be stable across retries, which is not obvious from the brief's wording.
 
-**What came back:**
+**What I did with it:** used it as the checklist for everything that followed.
 
-```ts
-⚠ Paste the actual response, or the relevant part of it.
-```
+### Prompt 2 — planning, and where the AI overstepped
 
-**What I did with it:** ⚠ Did you accept it? Modify it? Reject it? Why?
+> i need a comprehensive adr, adr for dummies and implementation plan for this. also create an
+> agant.md along side the one they requested.
 
----
+**What came back:** 15 ADRs, a plan and `AGENT.md`. The architecture was coherent, and the
+reconciliation design in ADR-0006 — treating a timeout as *unknown* rather than *failed* — is the
+strongest idea in the repo.
 
-### Prompt 2 — ⚠ FILL IN: the optimistic-update one
+**The problem:** it had silently chosen TanStack Query + Zustand and written every document around
+that choice. I hadn't been asked. See §3.2.
 
-**What I asked:**
+### Prompt 3 — challenging that
 
-```
-⚠ Paste your actual prompt.
-```
+> did you ask me which statemanagement i intend to use or you thought you should decide for me
 
-**What came back:**
+**What came back:** the model acknowledged it had decided unilaterally, then asked me to choose
+state management, styling and E2E runner. I chose **Redux Toolkit + RTK Query**, Tailwind and
+Playwright. It rewrote ADR-0003, ADR-0004 and ADR-0006, and patched the other documents.
 
-```ts
-⚠ Paste it.
-```
+**Why this prompt mattered:** the brief requires me to defend these decisions live. A stack I
+hadn't chosen, with 15 documents arguing for it, would have been the worst thing to walk in with.
 
-**What I did with it:** ⚠ FILL IN.
+## 3. Where the AI was wrong
 
----
+Ordered by how badly each would have hurt.
 
-### Prompt 3 — ⚠ FILL IN: something where AI genuinely saved you time
+### 3.1 A money-formatting bug, plus a documented claim that it was correct
 
-Worth including one of these so the file isn't only a list of AI failures — the brief says
-they want evidence of using AI **to move faster** as well as evidence of catching it being
-wrong. Good candidates: generating the 1,200-row seed data with realistic Nigerian merchant
-descriptions, scaffolding MSW handlers from the contract types, or generating the Playwright
-boilerplate.
-
-**What I asked:**
-
-```
-⚠ Paste it.
-```
-
-**What came back:** ⚠ FILL IN.
-
-**Why this was a good use:** ⚠ Something like — it's high-volume, low-risk, easily verified
-work. The failure mode is "the data looks odd", not "a merchant loses money." That's exactly
-the kind of task to delegate, and the money and reconciliation logic is exactly the kind not
-to.
-
----
-
-## 3. Where AI was wrong or risky
-
-> **This is the section that's actually being graded.** The brief names two likely candidates
-> — naive kobo maths and a rollback that doesn't reconcile. Below is the structure to use.
-> **Replace the content with what really happened to you.** If the AI made a *different*
-> mistake, write that one up instead — a real, specific, unexpected catch is worth far more
-> than the one they predicted.
-
-### Case 1 — ⚠ FILL IN
-
-**What it produced:**
+**What it produced.** Some older Android WebViews can't pass a string to `Intl.NumberFormat`. The
+first fallback for them converted the decimal string back to a number:
 
 ```ts
-⚠ The actual bad code.
+: nairaFormatter.format(Number(decimal))
 ```
 
-**Why it was wrong:** ⚠ Be precise and technical. Name the specific input that breaks it and
-the specific consequence.
+ADR-0002 then described this fallback as "correct across the entire range this app can produce."
 
-**How I caught it:** ⚠ This matters as much as the catch itself. Did a test fail? Did you spot
-it in review? Did you only find it when you tried a specific input? Saying "a property-based
-round-trip test over 10,000 values failed on X" is much stronger than "I noticed it looked
-wrong."
+**Why it was wrong.** Above about ₦10 trillion, the decimal needs 16 significant digits, and a double
+holds 15. The result is silently one kobo out, well inside the valid amount range.
 
-**What I did instead:** ⚠ Your fix, plus the guard that stops it recurring — the test you added,
-the lint rule, the note in `AGENT.md`.
+**How it was caught.** The model had also written a property test asserting that the fallback agrees
+with the primary path over 5,000 random amounts. It failed on its first run:
 
----
+```
+expected '₦83,738,716,901,127.19' to be '₦83,738,716,901,127.18'
+```
 
-### Case 2 — ⚠ FILL IN
+Every case in the hand-written table used a small amount. Reasoning had not caught it, and neither
+had the table.
 
-Same structure.
+**Fix.** The fallback now formats the whole-naira part, which is an exact integer, via
+`formatToParts`, and splices the two kobo digits into the fraction slot. A regression test pins the
+failing amount.
 
-> **Strong candidate for one of these, if it happened to you:** the RTK Query documentation's
-> own optimistic-update example is
-> `try { await queryFulfilled } catch { patchResult.undo() }`. That bare `catch` cannot
-> distinguish a `422` from a timeout, so copying it into a payments app rolls back transfers
-> that may have succeeded. If an assistant handed you that — and it very likely will, since it
-> is the canonical pattern in the training data — it is an unusually good write-up: the AI was
-> not hallucinating, it was correctly reproducing official guidance that is wrong for *this*
-> domain. Say that explicitly. It is a sharper point than "the AI got it wrong."
+**A second error on top of the first.** When updating ADR-0002, the model credited the catch to the
+round-trip test (10,000 runs). The reviewer flagged the mismatch. It was the 5,000-run agreement
+test, and the round-trip *could not* have caught it: on an engine with Intl V3 string input, Node
+included, the round-trip never executes the fallback.
 
+### 3.2 Choosing the state-management stack for me
 
----
+**What it produced.** 15 ADRs arguing for TanStack Query + Zustand, a stack I never chose.
 
-### Case 3 (optional) — a suggestion I rejected for reasons AI couldn't know
+**Why it was risky.** Being able to defend the choice is part of the assessment. The documents were
+persuasive enough that I might have adopted the stack by default, then had to defend another
+person's reasoning under questioning.
 
-⚠ Strong material if you have it. The pattern: the generated code was *technically* fine but
-wrong for **this** context — Nigerian users on low-end Android, NDPA constraints, metered data,
-CBN disclosure expectations. For example, a suggestion to persist the transfer draft to
-`localStorage` is good generic UX advice and a privacy problem when the draft contains an
-account number and the phone is shared.
+**How it was caught.** I asked directly (Prompt 3).
 
-That's the distinction the brief is really testing: AI is good at generic-correct, and the job
-is knowing where generic-correct isn't correct here.
+**Fix.** I chose Redux Toolkit + RTK Query, and the affected documents were rewritten. The rewrite
+also improved ADR-0006: the RTK Query documentation's own optimistic-update example ends in
+`catch { patchResult.undo() }`, which rolls back on a timeout. That is precisely the bug ADR-0006
+exists to prevent.
 
----
+### 3.3 Documentation claiming guards that did not exist
 
-## 4. How I directed the AI
+This was the most frequent error, and it is the category a review panel probes. Each item below was
+stated as fact:
 
-⚠ FILL IN — a short paragraph. Some things worth saying if they're true:
+| Claim | Reality |
+|---|---|
+| ADR-0002: the branded type "makes the drift impossible rather than merely discouraged." | A `Kobo` is still a `number`, so `{amount / 100}` in a component compiles. The brand only stops raw numbers being passed as money. |
+| ADR-0002: "A lint rule" bans `/ 100`. | `eslint.config.js` had no such rule. |
+| `AGENT.md`: "CI greps for it." | There is no CI. |
+| ADR-0013 and `AGENT.md`: `react/no-danger` is set to error. | The React lint plugin was not installed. |
+| `AGENT.md` command list | Listed `npm run e2e`, `test:ui` and `jsx-a11y` — none existed. |
+| ADR-0001 title | Said React 18; the project uses React 19. |
 
-- I gave it the constraints up front (kobo integers, the four failure states) rather than
-  accepting a generic answer and patching it.
-- I asked it to enumerate failure modes rather than to write the implementation, then wrote the
-  implementation myself.
-- I wrote `AGENT.md` specifically so that assistants working in this repo wouldn't reproduce
-  mistakes I'd already caught once. *(That file is in the repo root — it's the standing
-  instruction set for AI tools, as distinct from this file, which is the record of what I did
-  with them.)*
-- I treated anything touching money or the rollback path as requiring a test before I'd accept
-  it, regardless of how confident the output looked.
+**How it was caught.** Independent review, which compared each claim against the code instead of
+against the other documents.
 
----
+**Fix.**
+- The money lint rule now exists. `money.lint.test.ts` asserts that it fires, so it can't silently
+  stop matching.
+- The `dangerouslySetInnerHTML` ban became a `no-restricted-syntax` rule, which needs no plugin.
+- Every claim was rewritten to match the code. ADR-0002 now has a table of what each guard does
+  and does not prevent.
 
-## 5. My honest assessment
+**A follow-up gap.** The second review found that `x * 0.01` and `const K = 100; x / K` both passed
+the new lint rule. Probing further found `x / 0.01` and `x / 10 / 10` passed too. I closed the
+`0.01` forms. The named-constant and chained-division forms need data-flow analysis, which a syntax
+rule can't do. Rather than leave the docs to overclaim again, those two gaps have **tests asserting
+they are not caught**, so widening the rule later forces the ADR to be updated.
 
-⚠ FILL IN — a few sentences. Where did AI genuinely help, where was it actively dangerous, and
-what's your rule for when to trust it?
+### 3.4 A formatter that hid a sign mismatch
 
-A defensible position, if it's yours: AI was excellent at high-volume, easily-verified work
-(seed data, handler scaffolding, test boilerplate, Tailwind) and actively dangerous on the two
-places where the correct answer is counter-intuitive — money precision and knowing what a
-timeout does and doesn't tell you. On both, the first suggestion was confident, idiomatic, and
-wrong, because the common pattern on the internet *is* the wrong pattern for payments. The rule
-I'd take forward: **the more confidently generic the output looks, the more likely it is that
-it hasn't understood the constraint that makes this domain different.**
+**What it produced.**
+
+```ts
+export function formatSignedNaira(kobo: Kobo, direction: 'credit' | 'debit'): string {
+  const magnitude = formatNaira(Math.abs(kobo) as Kobo)
+  return direction === 'credit' ? `+${magnitude}` : `−${magnitude}`
+}
+```
+
+**Why it was wrong.** Two sources of sign — the amount and `direction` — and `Math.abs` resolved any
+disagreement silently. `formatSignedNaira(-100050, 'credit')` rendered `+₦1,000.50` with no error.
+In a reconciliation-heavy payments flow, that's the mismatch you want to hear about. The test only
+covered a negative *debit*, the one case that happens to work.
+
+It also used U+2212 for the minus sign, while `formatNaira` used a hyphen, so a balance and a
+transaction row could show the same amount differently.
+
+**How it was caught.** Independent review.
+
+**Fix.**
+- The function now takes a non-negative magnitude and throws on a negative one. There are tests for
+  both directions.
+- Negatives use a hyphen everywhere, with a test that a debit row matches a negative balance
+  byte for byte.
+
+### 3.5 Smaller errors
+
+- **A feature-detection probe that detected nothing.** The first draft of the plan tested for Intl V3
+  string support with `format('1.5') === format(1.5)`. Older engines coerce `'1.5'` to a number, so
+  that comparison is true on both paths. The model caught this itself before any code was written,
+  and switched to a probe value that loses precision as a double.
+- **Invisible characters.**
+  - A non-breaking space inside a regex character class made `npm run lint` fail.
+  - The plan document contained a literal U+202E right-to-left override: the spoofing character
+    ADR-0013 warns about, sitting unescaped in a doc.
+  - Both were removed. A scan confirms no other hidden characters remain.
+- **An invented business rule.** ADR-0009 stated a "₦100 minimum" transfer as though it were a
+  requirement. The brief never mentions one. The model flagged it while writing the README, which now
+  lists it as an assumption.
+- **A permissive parser.** It stripped every comma and space anywhere, so `"1,0,0,0"` and `"10 00"`
+  parsed as valid amounts. It now requires correct grouping.
+- **A stale code sample.** The implementation plan's Phase 1 section still held the buggy fallback
+  from §3.1 after the source was fixed. The sample was removed and replaced with links to the real
+  files.
+
+## 4. How I directed it
+
+- **I checked its work against a second opinion rather than its own.** The model's self-review caught
+  its code bugs through tests. It did not catch its documentation overclaiming. The independent
+  review did, by checking each claim against the code.
+- **I asked it to prove its tests weren't hollow.** For each review fix, the fix was reverted to
+  confirm a test failed. Sign check: 2 failures. Parser grouping: 3. Naive fallback: 2. Removing the
+  lint rule: 5.
+- **I made it verify before asserting.** Every npm script listed in the README was run first. Every
+  link was checked. The hard-coded test count was removed, since it would go stale.
+- **I overrode it on decisions that were mine.** State management, and doing the scaffold myself.
+
+## 5. Assessment
+
+⚠ *Rewrite this section in your own words — it's your judgement, not the model's. The draft below
+only restates what the entries above show.*
+
+The AI was fast and genuinely useful for structure: turning a brief into ADRs, a plan and a test
+design. It also produced one idea I consider the core of the project — treating a timeout as
+unknown rather than failed. Its failures had a consistent shape. The code it wrote was usually
+caught by the tests it wrote. But its prose described intentions as facts: guards that didn't
+exist, ranges it hadn't verified, a sign-handling contract its implementation didn't keep.
+
+The rule I'd take forward: **treat every generated claim of the form "X is prevented" or "X is
+correct across Y" as unverified until a test or a command demonstrates it.** Property tests caught
+what hand-picked cases missed, and a reviewer comparing docs to code caught what the model's own
+review missed.

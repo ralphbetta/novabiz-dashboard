@@ -17,8 +17,9 @@ misses.
 ## Decision
 
 **1. Default to React's own escaping.** All such text renders as a JSX text child. React
-escapes it. There is **no `dangerouslySetInnerHTML` in this codebase**, and an ESLint rule
-(`react/no-danger`, error) makes adding one a build failure rather than a review comment. No
+escapes it. There is **no `dangerouslySetInnerHTML` in this codebase**, and an ESLint
+`no-restricted-syntax` rule matching the JSX attribute makes adding one a build failure rather
+than a review comment. It needs no React lint plugin, and a test asserts it fires. No
 rich text is required anywhere, so this costs nothing.
 
 **2. Normalise on the way in, not on the way out.** At the API boundary, transaction
