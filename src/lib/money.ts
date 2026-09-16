@@ -114,7 +114,7 @@ const AMOUNT_PATTERN = /^(-)?₦?\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?$/
  * Accepts U+2212 MINUS SIGN as well as hyphen-minus, since pasted text may contain either.
  */
 export function parseNairaInput(input: string): Kobo | null {
-  const match = AMOUNT_PATTERN.exec(input.trim().replace(/−/g, '-'))
+  const match = AMOUNT_PATTERN.exec(input.trim().replace(/\u2212/g, '-'))
   if (!match) return null
 
   const [, sign, whole = '', fraction = ''] = match

@@ -14,7 +14,7 @@ view of money coming into the wallet, and a way to send money out. Built for the
 |---|---|---|
 | 0 | Scaffold, strict TypeScript, lint guards, test runner | ◐ Partly done |
 | 1 | Money module — kobo integers, formatting, parsing | ✅ Done |
-| 2 | MSW mock API — seeded ledger, pagination, idempotency, chaos controls | Not started |
+| 2 | MSW mock API — seeded ledger, pagination, idempotency, chaos controls | ◐ Part 1 of 3: contracts + seed data |
 | 3 | Data layer — Redux Toolkit store, RTK Query endpoints | Not started |
 | 4 | Balance summary + virtualised transaction feed | Not started |
 | 5 | Send Money wizard | Not started |
@@ -34,7 +34,9 @@ npm run dev         # Vite dev server
 
 **At this stage `npm run dev` serves the Vite starter page.** No dashboard UI exists yet; it starts
 in Phase 4. The mock API (Phase 2) will start automatically with the dev server once built — no
-second process.
+second process — and also in production builds, since there is no real backend
+([ADR-0005](docs/adr/ADR-0005-mock-api.md)). Because it runs as a service worker, the app must be
+served from `localhost` or over HTTPS: opening the dev server from a phone via a LAN IP will not work.
 
 ```bash
 npm test            # Vitest, run once
@@ -119,15 +121,17 @@ The brief leaves these open; each is a judgement call, recorded so it can be cha
 | Single currency, NGN only. | The brief describes a Naira wallet. The diaspora corridor lands funds already converted to NGN. |
 | Amounts are valid up to `Number.MAX_SAFE_INTEGER` kobo (~₦90 trillion). | Documented as a ceiling rather than engineered around with BigInt. Arithmetic past it throws. |
 | Negative amounts render with a hyphen-minus (`-₦2,500.00`), not U+2212. | It is what `Intl` emits, so every negative in the app renders identically and round-trips through the parser. |
-| **A minimum transfer of ₦100** *(not yet implemented)*. | **Not from the brief** — a plausible business rule, invented. It will be a named, configurable constant, and is separate from the mandatory `> 0` check. |
+| **A minimum transfer of ₦100.** | **Not from the brief** — a plausible business rule, invented. It is the named constant `MIN_TRANSFER_KOBO` in the shared contract, and is enforced separately from the mandatory `> 0` rule, so lowering it could never admit a ₦0 transfer. |
+| "Today" means the merchant's business day in West Africa Time (UTC+1), not the device's local day. | A merchant opening the app at 00:30 expects today's totals to have reset, whatever their phone's timezone setting. WAT has no daylight saving, which a test checks against real zone data. |
 | Target devices may lack Intl V3 and full `en-NG` locale data. | The brief names low-end Android. **Verified on Node only** — not yet on a real device. |
 
 ## Open items
 
 - **Not yet verified on a real low-end Android WebView:** the `₦` symbol fallback and `formatToParts`
   support. This is the strongest outstanding evidence gap for ADR-0002.
-- **Send Money must reject zero and negatives itself.** `parseNairaInput` accepts both by design.
-  The check is a stated requirement for Phase 5, with tests.
+- **Send Money must reject zero and negatives.** `parseNairaInput` accepts both by design. The
+  shared contract (`SendMoneyRequestSchema`) now rejects them with tests; the Phase 5 form must
+  surface that error accessibly.
 - The Vite starter assets (`src/App.tsx` demo, `hero.png`, `react.svg`, `vite.svg`) are still present
   and will be removed when the app shell is built.
 
@@ -136,7 +140,11 @@ The brief leaves these open; each is a judgement call, recorded so it can be cha
 ```
 src/lib/money.ts             Public money API
 src/lib/money.internal.ts    Formatting mechanics, split out for direct testing
-src/lib/*.test.ts            Unit, property-based and lint-guard tests
+src/lib/time.ts              Business-day boundaries (WAT)
+src/api/contracts.ts         Zod API contract, shared by the app and the mock server
+src/mocks/seed.ts            Seeded data: 1,200 transactions, stable across time of day, incl. hostile fixtures
+src/**/*.test.ts             Unit, property-based, contract, seed and lint-guard tests
+src/source-hygiene.test.ts   Fails on raw invisible, bidirectional or look-alike characters
 docs/adr/                    Architecture Decision Records
 docs/IMPLEMENTATION_PLAN.md  Phased build plan and progress
 AGENT.md                     Standing instructions for AI coding tools in this repo

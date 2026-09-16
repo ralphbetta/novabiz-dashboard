@@ -146,7 +146,7 @@ they are not caught**, so widening the rule later forces the ADR to be updated.
 ```ts
 export function formatSignedNaira(kobo: Kobo, direction: 'credit' | 'debit'): string {
   const magnitude = formatNaira(Math.abs(kobo) as Kobo)
-  return direction === 'credit' ? `+${magnitude}` : `−${magnitude}`
+  return direction === 'credit' ? `+${magnitude}` : `\u2212${magnitude}`
 }
 ```
 
@@ -182,6 +182,32 @@ transaction row could show the same amount differently.
   lists it as an assumption.
 - **A permissive parser.** It stripped every comma and space anywhere, so `"1,0,0,0"` and `"10 00"`
   parsed as valid amounts. It now requires correct grouping.
+- **A Trojan Source pattern, introduced by the agent's own tooling — three times.** Unicode escapes
+  typed by the agent (`\u202E`, `\u00A0`, `\u2212`) were decoded into raw characters on the way into
+  files, so source that was meant to hold escape text held a literal right-to-left override,
+  zero-width characters, a non-breaking space and a look-alike minus sign. A code comment then claimed
+  escapes had been used and that lint "would rightly reject" raw characters; neither was true, because
+  `no-irregular-whitespace` skips strings by default and does not cover bidi controls at all. Caught
+  by independent review. **Fix:** the characters are now written as escapes by generating the backslash
+  programmatically; `src/source-hygiene.test.ts` scans src, docs and config for any raw format
+  character or look-alike and fails the build; lint is configured strictly. The scan immediately found
+  three more raw minus signs in the docs.
+- **Timestamps claimed to sort as strings, but did not.** The contract accepted any fractional
+  precision, and `"...00.500Z" < "...00Z"` although it is the later instant. Caught by review; the
+  contract now requires exactly millisecond precision, with a test demonstrating the mis-sort.
+- **"Deterministic" seed data that was not, across time of day.** Random draws were skipped for rows
+  older than a day, shifting every later draw, so generating at 09:00 and 21:00 changed the top rows —
+  and, as a check showed, all 1,200 ids. Caught by review. **Fix:** each row draws from its own
+  seeded stream with all values drawn up front; a test asserts ids, names and descriptions are
+  identical across times of day and dates.
+- **Tied timestamps the pagination plan ignored.** At exactly midnight all of today's seed rows share
+  one timestamp, so a cursor on `createdAt` alone would skip or repeat rows. Caught by review; the
+  seed now guarantees a strict order on `(createdAt, id)`, tested at midnight, and the plan requires
+  the Part 2 cursor to use that pair.
+- **Seed data that was internally consistent but unrealistic.** The first draft failed 130 of ~340
+  debits for insufficient funds; the first correction produced none, and a later rewrite silently
+  produced no pending rows. Both states the UI must show now exist by construction, with tests
+  bounding them.
 - **A stale code sample.** The implementation plan's Phase 1 section still held the buggy fallback
   from §3.1 after the source was fixed. The sample was removed and replaced with links to the real
   files.

@@ -53,6 +53,10 @@ export default defineConfig([
     },
     rules: {
       'no-restricted-syntax': ['error', ...moneyGuard, noDangerousHtml],
+      // Editor feedback for invisible whitespace. The default skips string literals, which is exactly
+      // where hostile fixtures live. It cannot see non-whitespace format characters such as the
+      // right-to-left override; src/source-hygiene.test.ts covers those, and Markdown.
+      'no-irregular-whitespace': ['error', { skipStrings: false, skipComments: false, skipRegExps: false, skipTemplates: false, skipJSXText: false }],
     },
   },
   {

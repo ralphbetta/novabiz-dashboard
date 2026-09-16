@@ -34,7 +34,7 @@ The handlers implement a small **stateful in-memory server**, not canned respons
 
 ### The chaos controls
 
-A dev-only panel, backed by the preferences store, exposes:
+A panel, present whenever the mock is on — so in a deployed demo too — exposes:
 
 | Control | Range | Why it exists |
 |---|---|---|
@@ -67,10 +67,36 @@ app's data layer does not change at all.
 in dev, and the seeded dataset must stay in sync with the TypeScript contract types. We
 mitigate the last one by deriving the generator from the same types the app consumes.
 
-*Production safety:* the worker is started behind `import.meta.env.DEV` and an explicit
-`VITE_USE_MOCK` flag. A build that ships to a real environment cannot silently keep mocking.
+*The mock runs in every build, including production.* It starts unless `VITE_USE_MOCK` is
+explicitly `"false"`.
+
+An earlier draft of this ADR started the worker only under `import.meta.env.DEV`, so that a real
+deployment could not silently keep mocking. That reasoning assumes a real backend exists. None does,
+and none will for this project. A dev-only mock would mean that `npm run build && npm run preview`,
+or a deployed demo link on interview day, serves an app in which every request fails and every
+screen shows its error state. The failure mode the original rule guarded against — mocking where a
+real API was expected — cannot occur without a real API, while the failure mode it *caused* was
+certain.
+
+So the default is inverted: mocking is on unless switched off. When a real backend exists, setting
+`VITE_USE_MOCK=false` in that environment is the whole change, and the app's data layer does not
+change at all.
+
+*Service workers need a secure context.* MSW's browser worker only registers on `https://` or
+`localhost`. That has two practical consequences:
+- a deployed demo must be served over HTTPS, which every mainstream static host does by default;
+- **opening the dev server from a phone over the LAN (`http://192.168.x.x:5173`) will not work** —
+  the worker refuses to register and every request fails. This matters for the open item of testing
+  on a real low-end Android device: use an HTTPS tunnel or a deployed build, not a LAN address. The
+  app must detect a failed worker registration and say so plainly, rather than presenting it as a
+  network error.
 
 ## How we would know we were wrong
+
+- A real backend is introduced and some environment is still mocking because `VITE_USE_MOCK` was
+  never set to `false` there. Planned mitigation (Phase 2, part 3): the chaos panel — present
+  whenever the mock is on — will carry a visible "Mock API" badge, so a mocked environment cannot be
+  mistaken for a live one.
 
 - Handler logic grows past the point where it is obviously correct at a glance, and starts
   needing its own tests — at which point the "server" wants to be a real service.

@@ -113,7 +113,7 @@ describe('parseNairaInput', () => {
     ['0.01', 1],
     ['  1000.50  ', 100050],
     ['-₦2,500.00', -250000],
-    ['−₦2,500.00', -250000], // U+2212 MINUS SIGN, as pasted from typeset text
+    ['\u2212₦2,500.00', -250000], // U+2212 MINUS SIGN, as pasted from typeset text
   ]
 
   it.each(valid)('parses %s', (input, expected) => {

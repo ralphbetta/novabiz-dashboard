@@ -172,7 +172,41 @@ without Intl V3 string input; and a lint guard with a test proving it fires.
 
 ---
 
-### Phase 2 — The mock server (≈4h) ⭐
+### Phase 2 — The mock server (≈4h) ⭐ — ◐ part 1 of 3 done
+
+**Part 1 — done: contracts and seed data.**
+- [src/api/contracts.ts](../src/api/contracts.ts) — Zod schemas for every endpoint. Wire (plain
+  integer) and domain (`Kobo`) types. An explicit `> 0` transfer rule independent of the ₦100
+  minimum. `REJECTED_BY_CODE` pins which error codes may claim "nothing was written", so an
+  `INTERNAL_ERROR` can never tell the client to roll back (ADR-0006). The API returns only the last
+  four digits of counterparty account numbers.
+- [src/lib/time.ts](../src/lib/time.ts) — business-day boundaries in WAT, checked against real zone data.
+- [src/mocks/seed.ts](../src/mocks/seed.ts) — 1,200 transactions over 90 days, with at least 15 in the
+  current business day at any hour. Each row draws from its own random stream, so ids, names and
+  amounts are identical whatever time the app is opened; only pending status of recent rows and
+  overdraw-attempt amounts vary with `now`. The three newest rows are always pending. The ledger is simulated in time order so
+  available balance never goes negative, and insufficient-funds failures exist by construction.
+  Hostile fixtures (ADR-0013) and a diacritic name are on the first page.
+- **Found while building:** the first seed draft failed 130 of ~340 debits for insufficient funds
+  because debit amounts dwarfed credits; the first correction produced zero. A test now bounds it on
+  both sides.
+
+**Part 2 — next:** MSW install, in-memory ledger, the four handlers, cursor pagination, idempotent
+replay.
+
+**Part 2 constraints carried forward from review — must hold:**
+- **The cursor key is `(createdAt, id)`, never `createdAt` alone.** Timestamps tie: at exactly
+  midnight WAT all of today's seed rows share one instant. A createdAt-only cursor skips or repeats
+  rows at page boundaries. The seed guarantees a strict total order on the pair, and a test checks it.
+  Needs a test that pages through a tied block across a page boundary with no gaps or duplicates.
+- **New transfers must get ids that sort after every seed id.** Ids embed a zero-padded chronological
+  sequence number (`ID_SEQUENCE_DIGITS`); a transfer created in the mock continues that sequence.
+  A random or UUID id would break the tiebreaker for any transfer sharing a millisecond.
+- **Timestamps are always `toISOString()` output** (exactly millisecond precision). The contract
+  rejects anything else, because mixed precision mis-sorts as strings.
+- **The cursor is opaque to the client** — encoded, not a readable timestamp — so the client cannot
+  construct or depend on its format. **Part 3:** chaos controls and the Mock API badge.
+
 
 This is a bigger investment than it looks, and it pays back in every later phase.
 

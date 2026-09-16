@@ -26,7 +26,7 @@ eyeball.
 
 ## The point worth saying out loud
 
-**Money is never shown by colour alone.** Green and red are always backed by a `+`/`−` sign and
+**Money is never shown by colour alone.** Green and red are always backed by a `+`/`-` sign and
 a text label. Same for the pending/successful/failed badges — text and an icon, not just colour.
 
 About 8% of men can't reliably distinguish red from green. This is a number people make

@@ -27,7 +27,7 @@ themes; the check is a unit test over the token values, not an eyeball.
 
 ### Money is never colour alone
 
-Credits and debits are distinguished by an explicit `+` / `−` sign and a text label, not only
+Credits and debits are distinguished by an explicit `+` / `-` sign (hyphen-minus, per ADR-0002) and a text label, not only
 by green and red. Roughly 8% of men have a red-green colour vision deficiency, and this is a
 number a merchant acts on financially. Colour is reinforcement, never the signal. The same
 applies to the `pending` / `successful` / `failed` badges, which carry text and an icon.

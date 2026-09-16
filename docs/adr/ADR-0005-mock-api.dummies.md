@@ -49,6 +49,22 @@ requirement, and can't be reused inside component tests.
 
 **Stubbed modules** — fast to write, and hides the network entirely. See the trap above.
 
+## Where the mock runs — a decision that changed
+
+**The mock runs in every build, not just in development.** An earlier draft only turned it on in
+dev, so a real deployment couldn't accidentally keep using fake data.
+
+That sounds sensible until you notice **there is no real backend**. With a dev-only mock, running
+`npm run build && npm run preview` — or opening a deployed link on interview day — gives you an app
+where every screen shows an error. The risk the rule protected against can't happen without a real
+API; the problem it caused was guaranteed.
+
+So it's on by default, and a `VITE_USE_MOCK=false` setting turns it off when a real backend exists.
+
+**A gotcha worth knowing:** service workers only run on `https://` or `localhost`. If you open the
+dev server on your phone using your laptop's IP address (`http://192.168.x.x`), **the mock won't
+start and nothing will load.** For the real-phone test, use a deployed HTTPS link or a tunnel.
+
 ## What it costs me
 
 A service worker file to register, and the seed data has to stay in sync with the TypeScript
