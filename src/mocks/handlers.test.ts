@@ -85,7 +85,7 @@ describe('GET /api/transactions', () => {
   })
 
   it.each([
-    ['an out-of-range limit', 'limit=500', 'limit'],
+    ['an out-of-range limit', 'limit=1001', 'limit'],
     ['an unknown status', 'status=reversed', 'status'],
     ['an impossible date', 'from=2026-02-30', 'from'],
     ['a reversed date range', 'from=2026-09-16&to=2026-09-01', 'to'],

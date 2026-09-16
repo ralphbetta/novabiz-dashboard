@@ -95,40 +95,56 @@ describe('getBalance', () => {
   })
 })
 
-describe('getTransactions — infinite, cursor-paginated, server-filtered', () => {
-  it('fetches the first page, then appends the next', async () => {
-    const { api, store } = setup()
-    const first = await store.dispatch(api.endpoints.getTransactions.initiate({}))
-    expect(first.data?.pages).toHaveLength(1)
-    expect(first.data?.pages[0]?.items).toHaveLength(50)
-    expect(first.data?.pages[0]?.totalCount).toBe(1200)
+describe('getTransactionsPage — cursor-paginated, server-filtered', () => {
+  const firstPage = { filters: {}, limit: 25, cursor: null }
 
-    const second = await store.dispatch(api.endpoints.getTransactions.initiate({}, { direction: 'forward' }))
-    expect(second.data?.pages).toHaveLength(2)
-    const ids = second.data?.pages.flatMap((p) => p.items.map((t) => t.id)) ?? []
-    expect(new Set(ids).size).toBe(100)
+  it('fetches a page of the requested size, with the total across all pages', async () => {
+    const { api, store } = setup()
+    const page = await store.dispatch(api.endpoints.getTransactionsPage.initiate(firstPage))
+    expect(page.data?.items).toHaveLength(25)
+    expect(page.data?.totalCount).toBe(1200)
+    expect(page.data?.nextCursor).not.toBeNull()
   })
 
-  it('reports no next page once the last page is loaded', async () => {
+  it('follows the cursor to the next page, with no repeats', async () => {
     const { api, store } = setup()
-    const filters = { from: '2026-09-16', to: '2026-09-16' } // today only: fits on one page
-    await store.dispatch(api.endpoints.getTransactions.initiate(filters))
-    expect(api.endpoints.getTransactions.select(filters)(store.getState()).hasNextPage).toBe(false)
+    const first = await store.dispatch(api.endpoints.getTransactionsPage.initiate(firstPage))
+    const second = await store.dispatch(
+      api.endpoints.getTransactionsPage.initiate({ filters: {}, limit: 25, cursor: first.data?.nextCursor ?? null }),
+    )
+    const ids = [...(first.data?.items ?? []), ...(second.data?.items ?? [])].map((t) => t.id)
+    expect(new Set(ids).size).toBe(50)
+  })
+
+  it('serves 1,000 rows in one page — the largest rows-per-page option', async () => {
+    const { api, store } = setup()
+    const page = await store.dispatch(api.endpoints.getTransactionsPage.initiate({ filters: {}, limit: 1000, cursor: null }))
+    expect(page.data?.items).toHaveLength(1000)
+  })
+
+  it('reports no next page on the last page', async () => {
+    const { api, store } = setup()
+    const page = await store.dispatch(
+      api.endpoints.getTransactionsPage.initiate({ filters: { from: '2026-09-16', to: '2026-09-16' }, limit: 100, cursor: null }),
+    )
+    expect(page.data?.nextCursor).toBeNull()
   })
 
   it('sends filters to the server, and keeps each filter set as a separate cache entry', async () => {
     const { api, store } = setup()
-    const failed = await store.dispatch(api.endpoints.getTransactions.initiate({ status: 'failed' }))
-    const credits = await store.dispatch(api.endpoints.getTransactions.initiate({ type: 'credit' }))
-    expect(failed.data?.pages[0]?.items.every((t) => t.status === 'failed')).toBe(true)
-    expect(credits.data?.pages[0]?.items.every((t) => t.type === 'credit')).toBe(true)
-    expect(api.endpoints.getTransactions.select({ status: 'failed' })(store.getState()).data?.pages[0]?.totalCount)
-      .toBe(failed.data?.pages[0]?.totalCount)
+    const failedArgs = { filters: { status: 'failed' as const }, limit: 25, cursor: null }
+    const failed = await store.dispatch(api.endpoints.getTransactionsPage.initiate(failedArgs))
+    const credits = await store.dispatch(api.endpoints.getTransactionsPage.initiate({ filters: { type: 'credit' }, limit: 25, cursor: null }))
+    expect(failed.data?.items.every((t) => t.status === 'failed')).toBe(true)
+    expect(credits.data?.items.every((t) => t.type === 'credit')).toBe(true)
+    expect(api.endpoints.getTransactionsPage.select(failedArgs)(store.getState()).data?.totalCount).toBe(failed.data?.totalCount)
   })
 
   it('does not retry a 4xx', async () => {
     const { api, store } = setup()
-    const result = await store.dispatch(api.endpoints.getTransactions.initiate({ from: '2026-02-30' }))
+    const result = await store.dispatch(
+      api.endpoints.getTransactionsPage.initiate({ filters: { from: '2026-02-30' }, limit: 25, cursor: null }),
+    )
     expect(result.error).toMatchObject({ status: 400 })
     expect(count('GET', API.transactions)).toBe(1)
   })

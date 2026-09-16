@@ -1,0 +1,141 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens (ADR-0010).
+ *
+ * Colours are defined once as --nb-* variables, then exposed as Tailwind utilities through `@theme inline`,
+ * which Tailwind's docs require when a theme value references a variable that changes — here, in dark mode.
+ * Tailwind's default palette is removed, so components can only use these semantic tokens: every colour a
+ * component can reach is in this file, and tokens.test.ts checks each text/background pair against WCAG AA.
+ *
+ * Hex only, so the contrast test can read them. Dark mode is class-based: `.dark` on <html> (Phase 7 adds the
+ * toggle and persisted preference).
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --nb-canvas: #f4f6f9;
+  --nb-surface: #ffffff;
+  --nb-surface-muted: #eef1f5;
+  --nb-fg: #0f172a;
+  --nb-fg-muted: #4a5568;
+  --nb-border: #e1e6ee;
+  --nb-border-strong: #6b7688;
+  /* Resting border for controls: a light tint. Controls stay identifiable by their dark text and chevrons; the
+     border darkens to border-strong on hover, and focus and open states use the accent. */
+  --nb-border-control: #d3dae4;
+  --nb-accent: #1f4fd1;
+  --nb-accent-fg: #ffffff;
+  --nb-focus: #1f4fd1;
+
+  --nb-brand: #0b2447;
+  --nb-brand-raised: #16355f;
+  --nb-brand-fg: #ffffff;
+  --nb-brand-fg-muted: #c3d0e3;
+
+  --nb-credit: #047857;
+  --nb-credit-subtle: #e6f6f0;
+  --nb-debit: #0f172a;
+  --nb-pending: #9a5b05;
+  --nb-pending-subtle: #fdf3e1;
+  --nb-danger: #b42318;
+  --nb-danger-subtle: #fdecea;
+  --nb-success-subtle: #e6f6f0;
+
+  --nb-skeleton: #e3e8ef;
+}
+
+.dark {
+  --nb-canvas: #0a1120;
+  --nb-surface: #111a2c;
+  --nb-surface-muted: #19243a;
+  --nb-fg: #e7edf6;
+  --nb-fg-muted: #a4b2c7;
+  --nb-border: #243149;
+  --nb-border-strong: #7d8aa0;
+  --nb-border-control: #2e3b54;
+  --nb-accent: #86a8ff;
+  --nb-accent-fg: #0a1120;
+  --nb-focus: #86a8ff;
+
+  --nb-brand: #13294b;
+  --nb-brand-raised: #1d3862;
+  --nb-brand-fg: #ffffff;
+  --nb-brand-fg-muted: #c3d0e3;
+
+  --nb-credit: #4ade9f;
+  --nb-credit-subtle: #10281f;
+  --nb-debit: #e7edf6;
+  --nb-pending: #f5c16c;
+  --nb-pending-subtle: #2a2110;
+  --nb-danger: #ff8a80;
+  --nb-danger-subtle: #2c1515;
+  --nb-success-subtle: #10281f;
+
+  --nb-skeleton: #223049;
+}
+
+@theme inline {
+  --color-*: initial;
+  --color-canvas: var(--nb-canvas);
+  --color-surface: var(--nb-surface);
+  --color-surface-muted: var(--nb-surface-muted);
+  --color-fg: var(--nb-fg);
+  --color-fg-muted: var(--nb-fg-muted);
+  --color-border: var(--nb-border);
+  --color-border-strong: var(--nb-border-strong);
+  --color-border-control: var(--nb-border-control);
+  --color-accent: var(--nb-accent);
+  --color-accent-fg: var(--nb-accent-fg);
+  --color-focus: var(--nb-focus);
+  --color-brand: var(--nb-brand);
+  --color-brand-raised: var(--nb-brand-raised);
+  --color-brand-fg: var(--nb-brand-fg);
+  --color-brand-fg-muted: var(--nb-brand-fg-muted);
+  --color-credit: var(--nb-credit);
+  --color-credit-subtle: var(--nb-credit-subtle);
+  --color-debit: var(--nb-debit);
+  --color-pending: var(--nb-pending);
+  --color-pending-subtle: var(--nb-pending-subtle);
+  --color-danger: var(--nb-danger);
+  --color-danger-subtle: var(--nb-danger-subtle);
+  --color-success-subtle: var(--nb-success-subtle);
+  --color-skeleton: var(--nb-skeleton);
+
+  /* System fonts: no web-font download for merchants on metered data. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-canvas font-sans text-fg antialiased;
+    min-width: 320px;
+  }
+  /* Visible focus everywhere, for keyboard users (ADR-0012). Never removed; only restyled. */
+  :focus-visible {
+    outline: 3px solid var(--nb-focus);
+    outline-offset: 2px;
+  }
+  /* Money always aligns digit-for-digit. */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

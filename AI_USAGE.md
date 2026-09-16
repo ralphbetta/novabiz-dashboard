@@ -271,6 +271,16 @@ transaction row could show the same amount differently.
   transfer refused before sending that would have been reconciled as `unknown`. Each confirmed by a failing test
   first. Two of those tests initially failed for the wrong reason — a wrong import and a misused `unsubscribe`
   — and were corrected before they were counted as confirmations.
+- **UI accessibility bugs that looked right in screenshots.** Review of the Phase 4 UI found five, none visible in
+  the screenshots the model had checked: the mobile menu's close button was mostly covered by a transparent wrapper
+  pulled up with a negative margin, so taps missed it; filter and page-size results were never announced, because
+  remounting the table reset its "already announced" memory; changing rows per page threw keyboard focus to the top
+  of the page, because the footer holding the focused control unmounted; one shared timer let an assertive
+  announcement silently cancel a polite one; and a module-level flag made the page heading steal focus on first load
+  under React StrictMode, and leaked between tests. Each was confirmed first — by a failing component test, or for
+  the layout bug by probing which element sat under the button in real Chrome — and each fix was then broken on
+  purpose to check the test caught it. Two browser probes the model wrote along the way gave false alarms from
+  reading the page too early; both were traced to probe timing before any code was changed.
 - **A stale code sample.** The implementation plan's Phase 1 section still held the buggy fallback
   from §3.1 after the source was fixed. The sample was removed and replaced with links to the real
   files.

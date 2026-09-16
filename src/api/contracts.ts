@@ -10,6 +10,7 @@
  */
 import { z } from 'zod'
 import { formatNaira, toKobo, type Kobo } from '../lib/money'
+import { sanitizeText } from '../lib/sanitize'
 
 // ---------------------------------------------------------------------------
 // Endpoints
@@ -36,7 +37,12 @@ export const MIN_TRANSFER_KOBO: Kobo = toKobo(10_000) // ₦100.00
 
 export const NARRATION_MAX_LENGTH = 100
 export const PAGE_LIMIT_DEFAULT = 50
-export const PAGE_LIMIT_MAX = 100
+/**
+ * Up to 1,000 rows per page. The table offers large page sizes so a merchant can review a long statement on one
+ * page, and so the brief's "stays smooth with 1,000+ rows loaded" is exercised by real use: the table body is
+ * virtualised, so a 1,000-row page renders only the rows on screen (ADR-0016).
+ */
+export const PAGE_LIMIT_MAX = 1000
 
 // ---------------------------------------------------------------------------
 // Primitives
@@ -58,6 +64,12 @@ const signedKoboAmount = z.int({ error: 'Amount must be a whole number of kobo' 
  */
 const utcTimestamp = z.iso.datetime({ precision: 3, error: 'Timestamp must be ISO-8601 UTC with milliseconds' })
 
+/**
+ * Text from outside the app — another bank's customer, or the merchant. Sanitised as it is parsed, so nothing
+ * downstream can render a bidi override or a zero-width look-alike (ADR-0013).
+ */
+const untrustedText = z.string().transform((text) => sanitizeText(text))
+
 /** A NUBAN account number: exactly ten digits. */
 const accountNumber = z.string().regex(/^\d{10}$/, 'Account number must be 10 digits')
 
@@ -70,9 +82,9 @@ export const TransactionStatusSchema = z.enum(['pending', 'successful', 'failed'
 export const ChannelSchema = z.enum(['transfer', 'qr', 'pos', 'ussd'])
 
 export const CounterpartySchema = z.object({
-  /** UNTRUSTED. Set by another bank's customer and arrives via NIP. See ADR-0013. */
-  name: z.string(),
-  bankName: z.string(),
+  /** UNTRUSTED. Set by another bank's customer and arrives via NIP. Sanitised. See ADR-0013. */
+  name: untrustedText,
+  bankName: untrustedText,
   /**
    * Only the last four digits. The feed never needs the full number, so the API never sends it:
    * data minimisation under NDPA 2023 applied at the contract, not just hidden in the UI.
@@ -90,8 +102,8 @@ export const TransactionSchema = z
     channel: ChannelSchema,
     /** A magnitude. Direction comes from `type` alone — see formatSignedNaira in ADR-0002. */
     amountKobo: z.int({ error: 'Amount must be a whole number of kobo' }).min(1).transform(toKobo),
-    /** UNTRUSTED. See ADR-0013. */
-    description: z.string(),
+    /** UNTRUSTED. Sanitised. See ADR-0013. */
+    description: untrustedText,
     counterparty: CounterpartySchema,
     createdAt: utcTimestamp,
     /** Present on merchant-initiated transfers, so an optimistic row can be matched (ADR-0006/7). */
@@ -160,7 +172,9 @@ export const SendMoneyRequestSchema = z.object({
   recipient: z.object({
     accountNumber,
     bankCode: z.string().regex(/^\d{3,6}$/, 'Select a bank'),
-    accountName: z.string().trim().min(1, 'Account name is required').max(100),
+    // Sanitised BEFORE the checks: a name of only zero-width characters must fail "required", not pass it
+    // and then become empty.
+    accountName: untrustedText.pipe(z.string().min(1, 'Account name is required').max(100)),
   }),
   amountKobo: z
     .int({ error: 'Amount must be a whole number of kobo' })
@@ -172,8 +186,8 @@ export const SendMoneyRequestSchema = z.object({
       error: `The minimum transfer is ${formatNaira(MIN_TRANSFER_KOBO)}`,
     })
     .transform(toKobo),
-  /** UNTRUSTED merchant-entered text. See ADR-0013. */
-  narration: z.string().trim().max(NARRATION_MAX_LENGTH).optional(),
+  /** UNTRUSTED merchant-entered text. Sanitised before the length check. See ADR-0013. */
+  narration: untrustedText.pipe(z.string().max(NARRATION_MAX_LENGTH)).optional(),
 })
 
 /**

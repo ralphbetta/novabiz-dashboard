@@ -14,7 +14,6 @@ import {
   API,
   BalanceSchema,
   IDEMPOTENCY_HEADER,
-  PAGE_LIMIT_DEFAULT,
   TransactionsPageSchema,
   TransferResponseSchema,
   type Balance,
@@ -27,6 +26,14 @@ import { novabizBaseQuery } from './baseQuery'
 
 /** Server-side feed filters. Each distinct value is its own cache entry (ADR-0008). */
 export type TransactionFilters = Pick<TransactionQuery, 'from' | 'to' | 'status' | 'type'>
+
+export interface TransactionsPageArgs {
+  filters: TransactionFilters
+  /** Rows per page, from the table's rows-per-page option. */
+  limit: number
+  /** The server's opaque cursor for this page; null for the first page. */
+  cursor: string | null
+}
 
 export interface SendMoneyArgs {
   /** Already validated by SendMoneyRequestSchema: only a parsed request can be sent. */
@@ -54,21 +61,18 @@ export const novabizApi = createApi({
       keepUnusedDataFor: 30,
     }),
 
-    getTransactions: build.infiniteQuery<TransactionsPage, TransactionFilters, string | null>({
-      infiniteQueryOptions: {
-        initialPageParam: null,
-        // The server's cursor is opaque; null means there are no more pages.
-        getNextPageParam: (lastPage) => lastPage.nextCursor,
-        // A refetch — on reconnect, for example — reloads only the first page. The default reloads every
-        // cached page one after another: after a long scroll, 20+ sequential requests on a poor connection.
-        refetchCachedPages: false,
-      },
-      query: ({ queryArg, pageParam }) => ({
+    /**
+     * One page of the transaction table (ADR-0016). Filters, page size and cursor together are the cache key, so
+     * paging back to a page already seen is instant, and each page refetches independently — on reconnect, only
+     * the page on screen reloads.
+     */
+    getTransactionsPage: build.query<TransactionsPage, TransactionsPageArgs>({
+      query: ({ filters, limit, cursor }) => ({
         url: API.transactions,
         params: {
-          ...Object.fromEntries(Object.entries(queryArg).filter(([, value]) => value !== undefined)),
-          limit: PAGE_LIMIT_DEFAULT,
-          ...(pageParam === null ? {} : { cursor: pageParam }),
+          ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value !== undefined)),
+          limit,
+          ...(cursor === null ? {} : { cursor }),
         },
       }),
       transformResponse: parseWith(TransactionsPageSchema),
@@ -104,7 +108,7 @@ export type NovabizApi = typeof novabizApi
 
 export const {
   useGetBalanceQuery,
-  useGetTransactionsInfiniteQuery,
+  useGetTransactionsPageQuery,
   useSendMoneyMutation,
   useLazyGetTransferByKeyQuery,
 } = novabizApi

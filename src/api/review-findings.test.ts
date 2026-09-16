@@ -110,13 +110,19 @@ describe('finding 5: the API the hooks use can be configured by the store', () =
   }, 5_000)
 })
 
-describe('finding 7: reconnecting does not reload every page of a long scroll', () => {
-  it('a reconnect refetches only the first page', async () => {
+describe('finding 7: reconnecting does not reload every page the merchant has viewed', () => {
+  // Originally about an infinite query refetching every cached page. With pages (ADR-0016), the same guarantee
+  // is: only the page still on screen — the one still subscribed — refetches on reconnect.
+  it('a reconnect refetches only the page on screen, not pages paged past', async () => {
     mockServer()
     const store = makeStore({ http: FAST })
-    await store.dispatch(api.endpoints.getTransactions.initiate({}))
-    await store.dispatch(api.endpoints.getTransactions.initiate({}, { direction: 'forward' }))
-    await store.dispatch(api.endpoints.getTransactions.initiate({}, { direction: 'forward' }))
+    const page1 = store.dispatch(api.endpoints.getTransactionsPage.initiate({ filters: {}, limit: 25, cursor: null }))
+    const cursor1 = (await page1).data?.nextCursor ?? null
+    page1.unsubscribe() // paged past it
+    const page2 = store.dispatch(api.endpoints.getTransactionsPage.initiate({ filters: {}, limit: 25, cursor: cursor1 }))
+    const cursor2 = (await page2).data?.nextCursor ?? null
+    page2.unsubscribe()
+    await store.dispatch(api.endpoints.getTransactionsPage.initiate({ filters: {}, limit: 25, cursor: cursor2 })) // on screen
     expect(count('GET', API.transactions)).toBe(3)
 
     store.dispatch(api.internalActions.onOnline()) // what setupListeners dispatches on the browser's online event

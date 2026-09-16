@@ -4,14 +4,26 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b2447" />
     <title>NovaBiz Merchant Dashboard</title>
   </head>
   <body>
     <!-- Filled only if the data service cannot start. Present and empty from first paint, so a screen
          reader announces the message when it appears (ADR-0012). Outside #root, so React never replaces it. -->
+    <style>
+      /* Styled here, not in the app CSS: this banner must work even if the app's styles never load. */
+      /* Collapsed when empty, never display:none: a live region removed from the accessibility tree and
+         restored with its message is often not announced (ADR-0012). */
+      #startup-alert:empty { padding: 0; border: 0; }
+      #startup-alert {
+        font: 500 0.875rem/1.4 system-ui, sans-serif;
+        background: #fdf3e1; color: #6b3f02; border-bottom: 1px solid #e9c98f;
+        padding: 0.75rem 1rem; text-align: center;
+      }
+    </style>
     <div id="startup-alert" role="alert"></div>
     <!-- Visible until React renders, which it now does immediately rather than after the mock API starts. -->
-    <div id="root"><p role="status">Loading NovaBiz…</p></div>
+    <div id="root"><p role="status" style="font-family: system-ui, sans-serif; padding: 1.5rem; color: #4a5568">Loading NovaBiz…</p></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

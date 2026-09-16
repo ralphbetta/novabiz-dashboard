@@ -10,7 +10,8 @@ export default defineConfig({
     // under 250ms. The 5s default still timed out three tests on a heavily loaded machine running test
     // files in parallel, so it is raised rather than letting CPU starvation read as a failure.
     testTimeout: 20_000,
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
+    setupFiles: ['src/test/setup.ts'],
     coverage: { reporter: ['text', 'html'], include: ['src/lib/**'] },
   },
 })

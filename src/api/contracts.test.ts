@@ -137,13 +137,41 @@ describe('SendMoneyRequestSchema — recipient and narration', () => {
   })
 })
 
+describe('untrusted text is sanitised as it is parsed (ADR-0013)', () => {
+  const cp = (...codePoints: number[]) => String.fromCodePoint(...codePoints)
+
+  it('strips a bidi override from a transaction description', () => {
+    const parsed = TransactionSchema.parse({ ...validTransaction, description: `Refund ${cp(0x202e)}00.005${cp(0x202c)}` })
+    expect(parsed.description).toBe('Refund 00.005')
+  })
+
+  it('strips zero-width characters from a counterparty name', () => {
+    const tx = { ...validTransaction, counterparty: { ...validTransaction.counterparty, name: `Ngo${cp(0x200b)}zi` } }
+    expect(TransactionSchema.parse(tx).counterparty.name).toBe('Ngozi')
+  })
+
+  it('rejects an account name made only of invisible characters — sanitised before the required check', () => {
+    const req = { ...validSend, recipient: { ...validSend.recipient, accountName: cp(0x200b, 0xfeff, 0x202e) } }
+    expect(SendMoneyRequestSchema.safeParse(req).success).toBe(false)
+  })
+
+  it('sanitises narration before its length check', () => {
+    const padded = 'x'.repeat(NARRATION_MAX_LENGTH) + cp(0x200b).repeat(20)
+    expect(SendMoneyRequestSchema.safeParse({ ...validSend, narration: padded }).success).toBe(true)
+  })
+})
+
 describe('TransactionQuerySchema', () => {
   it('defaults the page size and coerces query-string values', () => {
     expect(TransactionQuerySchema.parse({}).limit).toBe(50)
     expect(TransactionQuerySchema.parse({ limit: '20' }).limit).toBe(20)
   })
 
-  it.each(['0', '101', 'abc', '2.5'])('rejects limit %j', (limit) => {
+  it('accepts a 1,000-row page, the largest rows-per-page option (ADR-0016)', () => {
+    expect(TransactionQuerySchema.parse({ limit: '1000' }).limit).toBe(1000)
+  })
+
+  it.each(['0', '1001', 'abc', '2.5'])('rejects limit %j', (limit) => {
     expect(TransactionQuerySchema.safeParse({ limit }).success).toBe(false)
   })
 
