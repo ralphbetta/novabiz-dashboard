@@ -94,6 +94,35 @@ round-trip test (10,000 runs). The reviewer flagged the mismatch. It was the 5,0
 test, and the round-trip *could not* have caught it: on an engine with Intl V3 string input, Node
 included, the round-trip never executes the fallback.
 
+### 3.1b A design error in the reconciliation rule itself
+
+**What it produced.** ADR-0006 — the document this project leans on hardest — said that when the
+reconciliation lookup returns `404`, "the request never reached the server. It is now safe to undo."
+The mock API was built to match: `NOT_FOUND` carried `rejected: true`, the flag that tells the client
+rolling back is safe. The ADR's own error table also listed `409` as a definite failure.
+
+**Why it was wrong.** A `404` can't distinguish "never received" from "not processed yet". If the POST
+is slow, the client times out, looks the key up, gets `404`, rolls back and — per ADR-0007 — discards
+the key. The POST then lands and debits, and the merchant, told it failed, resends under a new key.
+This is precisely the false "nothing was written" the whole design exists to prevent, and it sat in the
+design document, the code, and a test titled "the signal that rolling back is safe". A `409` is only
+possible *because* something already exists under the key.
+
+**How it was caught.** Independent adversarial review, which walked an in-flight POST through the
+lookup. Analysing that finding surfaced a variant the review did not name: an insufficient-funds
+refusal of a retry could later become a success if the timed-out original landed after the balance
+rose. Each case was confirmed by a test that failed against the unfixed code before any fix was made.
+One such test initially passed for the wrong reason — the balance never changed between attempts — and
+had to be rewritten so it could fail.
+
+**Fix.** `rejected: true` now has one precise meaning, pinned per error code: *no transfer exists
+under this key, and none ever will.* `NOT_FOUND` and `IDEMPOTENCY_KEY_REUSED` are `false`. The mock
+binds every processing outcome to the key, rejections included, and the lookup returns a bound
+rejection as a conclusive answer. The client decides from the flag, never the status code. ADR-0006,
+its plain-English companion, `AGENT.md` and the error table were all corrected. The same review also
+found seed keys the store didn't know, pending seed rows that never settled, a throwing settlement hook
+that stranded a transfer, and a narration fingerprint that turned an identical retry into a conflict.
+
 ### 3.2 Choosing the state-management stack for me
 
 **What it produced.** 15 ADRs arguing for TanStack Query + Zustand, a stack I never chose.
@@ -208,6 +237,13 @@ transaction row could show the same amount differently.
   debits for insufficient funds; the first correction produced none, and a later rewrite silently
   produced no pending rows. Both states the UI must show now exist by construction, with tests
   bounding them.
+- **A test suite that could not catch the most important error it was guarding.** In the mock API,
+  making every error response claim `rejected: true` — which would tell the client to roll back a
+  transfer after a server crash — still passed all 54 tests, because no test ever produced an
+  `INTERNAL_ERROR`. Found by deliberately breaking the code to check each test could fail, not by
+  review. It also revealed that an unexpected exception returned MSW's generic 500, whose body did not
+  match the error contract. **Fix:** an error boundary on every handler, and a test driving a crash
+  through each endpoint.
 - **A stale code sample.** The implementation plan's Phase 1 section still held the buggy fallback
   from §3.1 after the source was fixed. The sample was removed and replaced with links to the real
   files.

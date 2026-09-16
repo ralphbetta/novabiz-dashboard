@@ -176,7 +176,13 @@ export const SendMoneyRequestSchema = z.object({
   narration: z.string().trim().max(NARRATION_MAX_LENGTH).optional(),
 })
 
-export const IdempotencyKeySchema = z.uuid({ error: 'Idempotency-Key must be a UUID' })
+/**
+ * UUIDs are case-insensitive (RFC 9562), so keys are lowercased at the boundary. Otherwise a POST with
+ * an uppercase key and a lookup with the lowercase form would miss each other.
+ */
+export const IdempotencyKeySchema = z
+  .uuid({ error: 'Idempotency-Key must be a UUID' })
+  .transform((key) => key.toLowerCase())
 
 export const TransferResponseSchema = z.object({
   transfer: TransactionSchema,
@@ -196,19 +202,28 @@ export const ErrorCodeSchema = z.enum([
 export type ErrorCode = z.output<typeof ErrorCodeSchema>
 
 /**
- * Whether each error code means the server affirmatively wrote nothing.
+ * Whether an error with this code proves that NO transfer exists under the request's idempotency key,
+ * and that none ever will. This is the only signal that makes rolling back an optimistic transfer safe
+ * (ADR-0006), so every `true` below is a promise the server must be able to keep:
  *
- * This is the contract ADR-0006's `isDefiniteFailure` depends on: `rejected: true` is the only
- * signal that makes rolling back an optimistic transfer safe. Pinned per code — not left to each
- * handler — because an INTERNAL_ERROR sent with `rejected: true` would make the client roll back a
- * transfer that may have gone through. That is the exact bug ADR-0006 exists to prevent.
+ *   VALIDATION_FAILED       true  — the request was refused before processing. Assumes the client never
+ *                                   reuses a key for a different payload (ADR-0007).
+ *   INSUFFICIENT_FUNDS      true  — and the rejection is BOUND to the key: every later request with that
+ *                                   key gets the same answer, so an original attempt still in flight
+ *                                   cannot land afterwards and succeed.
+ *   IDEMPOTENCY_KEY_REUSED  false — a 409 is only possible because something already exists under the
+ *                                   key. The client must look it up, never roll back.
+ *   NOT_FOUND               false — a lookup miss proves nothing: the POST may still be in flight. The
+ *                                   client keeps reconciling, never rolls back on a miss.
+ *   INTERNAL_ERROR          false — a crash part-way through may have written something.
+ *
+ * Pinned per code, not left to each handler, so no call site can make a promise the server can't keep.
  */
 export const REJECTED_BY_CODE = {
   VALIDATION_FAILED: true,
   INSUFFICIENT_FUNDS: true,
-  /** Same key, different payload. The original transfer is untouched and nothing new is written. */
-  IDEMPOTENCY_KEY_REUSED: true,
-  NOT_FOUND: true,
+  IDEMPOTENCY_KEY_REUSED: false,
+  NOT_FOUND: false,
   INTERNAL_ERROR: false,
 } as const satisfies Record<ErrorCode, boolean>
 
@@ -248,3 +263,4 @@ export type SendMoneyRequestWire = z.input<typeof SendMoneyRequestSchema>
 export type TransferResponse = z.output<typeof TransferResponseSchema>
 
 export type ApiError = z.output<typeof ApiErrorSchema>
+export type ApiErrorWire = z.input<typeof ApiErrorSchema>

@@ -90,7 +90,31 @@ we just **ask the server what happened to that key**:
 
 - **found, succeeded** → mark it settled
 - **found, failed** → now it's safe to undo
-- **404, never seen it** → the request never arrived. Safe to undo, safe to retry.
+- **"I refused this key"** (e.g. insufficient funds) → safe to undo. The server remembers the refusal
+  forever, so it can't turn into a success later.
+- **404, "haven't seen it"** → **NOT safe to undo.** Keep waiting.
+
+### The mistake that was in the first version — know this story
+
+The first version of this ADR said a 404 meant *"the request never arrived — safe to undo."* It
+sounds obviously right. It's wrong, and it was caught in review:
+
+1. The merchant's request is slow. The app times out and starts checking.
+2. The app asks "what happened to this key?" The slow request hasn't been processed yet → **404**.
+3. The old rule says undo. The balance goes back up. The key gets thrown away.
+4. The slow request finally lands and takes the money. The merchant, told it failed, sends it again
+   with a new key. **Paid twice.**
+
+**The server can only say "no" about a key it has actually processed.** "I haven't seen it" just
+means "not yet". So the server now remembers every outcome, rejections included, and only a
+remembered rejection counts as a real "no".
+
+If checking gives up after ~2 minutes, *Try again* uses the **same** key. If the slow request did land,
+the retry just returns it; if it didn't, the retry sends it exactly once.
+
+**Say this if asked:** *"A missing record isn't evidence of absence while a request can still be in
+flight. The server only makes negative promises about keys it has processed, and it binds rejections
+to the key so they can't later become successes."*
 
 It polls with backoff (1s, 2s, 4s, 8s), pauses when you're offline, and after ~2 minutes stops
 and gives the merchant a *Check status* button rather than spinning forever.

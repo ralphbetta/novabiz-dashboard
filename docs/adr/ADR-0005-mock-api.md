@@ -26,8 +26,15 @@ The handlers implement a small **stateful in-memory server**, not canned respons
   so screenshots, tests, and the demo are reproducible;
 - **cursor-based pagination** with server-side filtering by date range, status and type;
 - a **balance** derived from the ledger, so a successful transfer genuinely changes it;
-- an **idempotency store** keyed by `Idempotency-Key`, which **replays the original response**
-  for a repeated key instead of creating a second transfer (ADR 0007);
+- an **idempotency store** keyed by `Idempotency-Key`: a repeated key with the **same payload** returns `202` with the transfer's
+  **current state** and an `Idempotent-Replayed: true` header, instead of creating a second transfer.
+  The same key with a **different payload** is refused with `409 IDEMPOTENCY_KEY_REUSED` and writes
+  nothing. A rejection reached while processing (e.g. insufficient funds) **is** bound to its key:
+  every later request with that key gets the same rejection, even if funds arrive meanwhile. That is
+  what makes `rejected: true` a promise the server can keep — otherwise an original attempt still in
+  flight could land after a retry was refused, and succeed (ADR 0007).
+  *Why current state rather than a byte-for-byte replay of the first response:* a client retrying
+  after a timeout needs to learn that the transfer has since settled, not be told `pending` again;
 - **pending transfers that settle asynchronously** — a transfer returns `202 pending` and
   resolves to `successful` or `failed` a few seconds later, which is how NIP actually behaves
   and is what makes the reconciliation in ADR 0006 meaningful rather than theoretical.
@@ -90,6 +97,32 @@ change at all.
   on a real low-end Android device: use an HTTPS tunnel or a deployed build, not a LAN address. The
   app must detect a failed worker registration and say so plainly, rather than presenting it as a
   network error.
+
+*Seed rows are first-class.* Seed debits carry idempotency keys, so those keys are registered with
+the store: a seed transfer can be looked up, and its key can never be reused for a new transfer.
+Pending seed rows settle a few minutes after the mock starts — visible as pending first, never holding
+funds forever.
+
+*Known limitation: state is not durable.* The mock server lives in page memory. A reload or a second tab
+starts a fresh server that has forgotten every transfer and key created before it, and ids and
+reference numbers start again from the same sequence. A real server is durable, and ADR-0006's retry
+safety depends on that. Persisting the mock's state to browser storage would close most of the gap
+and is recorded as an open option rather than built.
+
+*Startup never leaves a blank page.* `index.html` shows a loading message from first paint, before any
+JavaScript. If the worker has not started within 15 seconds, the page says so and asks for a reload,
+rather than staying blank.
+
+*Unexpected errors are contract-valid.* Every handler is wrapped so a thrown exception becomes a
+`500 INTERNAL_ERROR` with `rejected: false`, never MSW's generic 500 body. A crash part-way through a
+transfer may have written something, so the client must reconcile rather than roll back (ADR-0006).
+A test drives a crash through every endpoint.
+
+*Bundle cost — an open decision.* The mock chunk is ~523 kB minified (~188 kB gzipped), and startup
+waits for it before first render. By source size it is mostly zod (361 kB, which the app will need
+anyway from Phase 3), msw (208 kB), and MSW's cookie handling via tldts and tough-cookie (257 kB),
+which this API does not use. Because the mock now ships in production builds, the target audience on
+slow connections pays this. Not yet resolved; see the implementation plan.
 
 ## How we would know we were wrong
 

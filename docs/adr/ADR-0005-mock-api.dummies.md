@@ -27,7 +27,8 @@ And it's a **stateful little server**, not canned responses:
 - 1,200 seeded transactions from a fixed seed, so it's reproducible
 - cursor pagination and real server-side filtering
 - a balance derived from the ledger, so a transfer actually changes it
-- an idempotency store that **replays** the original response for a repeated key
+- an idempotency store: send the same request twice with the same key and you get the **same
+  transfer back**, in its current state, with no second payment. Same key, *different* request → refused
 - transfers return `202 pending` and settle a few seconds later — because that's how NIP
   actually behaves, and it's what makes the reconciliation work meaningful instead of theoretical
 

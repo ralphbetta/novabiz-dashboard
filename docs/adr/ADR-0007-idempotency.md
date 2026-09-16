@@ -25,8 +25,15 @@ The key only has value if it is **stable across every retry of the same intent**
 4. The key is cleared only when the attempt reaches a **terminal** state (`settled` or a
    confirmed `failed`). Changing the amount or the recipient starts a **new** attempt with a
    **new** key, because it is a different intent.
-5. The mock server keeps an **idempotency store**: a repeated key returns the **original
-   response**, with no second ledger entry.
+5. The mock server keeps an **idempotency store**: a repeated key with the **same payload** returns `202` with the transfer's
+   **current state** and an `Idempotent-Replayed: true` header, instead of creating a second transfer.
+   The same key with a **different payload** is refused with `409 IDEMPOTENCY_KEY_REUSED` and writes
+   nothing. A rejection reached while processing (e.g. insufficient funds) **is** bound to its key:
+   every later request with that key gets the same rejection, even if funds arrive meanwhile. That is
+   what makes `rejected: true` a promise the server can keep — otherwise an original attempt still in
+   flight could land after a retry was refused, and succeed.
+   *Why current state rather than a byte-for-byte replay of the first response:* a client retrying
+   after a timeout needs to learn that the transfer has since settled, not be told `pending` again.
 
 ### The rule in one line
 

@@ -122,7 +122,7 @@ export interface SeedOptions {
 }
 
 /** An independent stream per row, so one row's branching cannot shift another row's values. */
-function rowRng(seed: number, sequence: number): Rng {
+export function rowRng(seed: number, sequence: number): Rng {
   return createRng((Math.imul(seed ^ 0x85ebca6b, 0x9e3779b1) + Math.imul(sequence + 1, 0xc2b2ae35)) >>> 0)
 }
 
@@ -156,10 +156,10 @@ function placeTimestamps(rng: Rng, now: number, count: number): number[] {
   return times.sort((a, b) => a - b)
 }
 
-const sequenceId = (sequence: number, rng: Rng) =>
+export const sequenceId = (sequence: number, rng: Rng) =>
   `txn_${String(sequence).padStart(ID_SEQUENCE_DIGITS, '0')}${rng.hex(8)}`
 
-const reference = (sequence: number, at: number) =>
+export const reference = (sequence: number, at: number) =>
   `NVB${calendarDate(new Date(at)).replaceAll('-', '')}${String(sequence).padStart(6, '0')}`
 
 export function generateSeedTransactions({ now, seed = SEED, count = SEED_TRANSACTION_COUNT }: SeedOptions): TransactionWire[] {

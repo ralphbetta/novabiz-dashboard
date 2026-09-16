@@ -125,17 +125,26 @@ sendMoney: build.mutation<TransferResponse, SendMoneyArgs>({
 }),
 ```
 
-`isDefiniteFailure` (`src/lib/errors.ts`) returns `true` **only** for responses where the server
-has affirmatively told us nothing was written. It is the most important function in the app and
-has its own unit tests. With RTK Query's `FetchBaseQueryError` union, the shapes are:
+`isDefiniteFailure` (`src/lib/errors.ts`) returns `true` **only** when the response body carries
+`error.rejected: true`. It reads **the flag, never the status code**. It is the most important
+function in the app and has its own unit tests.
+
+`rejected: true` is a promise with a precise meaning, defined and pinned per error code in
+`REJECTED_BY_CODE` (`src/api/contracts.ts`): **no transfer exists under this idempotency key, and
+none ever will.** With RTK Query's `FetchBaseQueryError` union:
 
 | Error shape | Definite failure? |
 |---|---|
-| `{ status: 400\|409\|422, data: { rejected: true } }` | **Yes** — roll back |
+| `400 VALIDATION_FAILED` / `422 INSUFFICIENT_FUNDS`, `rejected: true` | **Yes** — roll back |
+| `409 IDEMPOTENCY_KEY_REUSED`, `rejected: false` | No — something already exists under the key; look it up |
+| `404 NOT_FOUND` (from the lookup), `rejected: false` | No — the original may still be in flight |
 | `{ status: 'FETCH_ERROR' }` (network) | No — unknown |
 | `{ status: 'TIMEOUT_ERROR' }` | No — unknown |
-| `{ status: 500…599 }` | No — unknown |
+| `500 INTERNAL_ERROR`, `rejected: false`, or any other `5xx` | No — unknown |
 | `{ status: 'PARSING_ERROR' }` | No — the server may have acted |
+
+A status code alone is not evidence. An earlier draft of this table listed `409` as a definite
+failure, but a `409` is only possible *because* a transfer already exists under that key.
 
 Note the last row: a response we could not parse is **not** a failure. The server may have
 processed the transfer and returned something unexpected.
@@ -151,9 +160,33 @@ GET /transfers?idempotencyKey=<key>      →  getTransferByKey
 
 - **found, successful** → transition to `settled`, patch the cache with the canonical row.
 - **found, failed** → transition to `failed`, undo the patch, announce it.
-- **404 not found** → the request never reached the server. It is now safe to undo, and safe to
-  offer *Try again* — which reuses the same key, so even a request that was in flight all along
-  cannot produce a second debit.
+- **a rejection bound to the key** (e.g. `422 INSUFFICIENT_FUNDS`, `rejected: true`) → conclusive:
+  the server processed the key, refused it, and will refuse it forever. Undo and announce.
+- **`404` not found** → **not an answer.** Stay `unknown` and keep polling. Never undo on a miss.
+
+### Why a miss is not an answer
+
+An earlier draft of this ADR said a `404` meant "the request never reached the server. It is now safe
+to undo." That was wrong, and it was the most dangerous error in the design, because it is exactly
+the false "nothing was written" this ADR exists to prevent:
+
+1. The POST is slow. The client times out and enters `unknown`.
+2. Reconciliation looks the key up. The POST has not been processed yet, so: `404`.
+3. The draft rule rolls back, restores the balance, and — under ADR-0007 — clears the key.
+4. The original POST lands and debits. The merchant, told it failed, taps *Try again* with a **new**
+   key. They have paid twice.
+
+A server can only prove a negative about a key it has **processed**. So the server binds every
+processing outcome to the key — including rejections — and the lookup returns that bound rejection
+when there is one. Until then, a miss means "not yet", nothing more.
+
+**When reconciliation gives up** (~2 minutes) the row enters *needs attention*. *Try again* there
+**reuses the same key**. That is safe in both cases: if the original eventually landed, the retry
+replays it; if it never did, the retry creates the transfer exactly once.
+
+**A mock-only limitation.** The mock server keeps its state in page memory, so after a reload it has
+forgotten every key — a same-key retry would create a second transfer *in the mock*. A real server's
+idempotency store is durable. See ADR-0005.
 
 Reconciliation runs in a listener middleware (`createListenerMiddleware`) rather than in a
 component, so it survives unmounting — a merchant who navigates away from the send screen must

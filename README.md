@@ -14,7 +14,7 @@ view of money coming into the wallet, and a way to send money out. Built for the
 |---|---|---|
 | 0 | Scaffold, strict TypeScript, lint guards, test runner | ◐ Partly done |
 | 1 | Money module — kobo integers, formatting, parsing | ✅ Done |
-| 2 | MSW mock API — seeded ledger, pagination, idempotency, chaos controls | ◐ Part 1 of 3: contracts + seed data |
+| 2 | MSW mock API — seeded ledger, pagination, idempotency, chaos controls | ◐ Parts 1–2 of 3: chaos controls remain |
 | 3 | Data layer — Redux Toolkit store, RTK Query endpoints | Not started |
 | 4 | Balance summary + virtualised transaction feed | Not started |
 | 5 | Send Money wizard | Not started |
@@ -33,8 +33,8 @@ npm run dev         # Vite dev server
 ```
 
 **At this stage `npm run dev` serves the Vite starter page.** No dashboard UI exists yet; it starts
-in Phase 4. The mock API (Phase 2) will start automatically with the dev server once built — no
-second process — and also in production builds, since there is no real backend
+in Phase 4. The mock API now starts automatically with the dev server — no second process — and also
+in production builds, since there is no real backend
 ([ADR-0005](docs/adr/ADR-0005-mock-api.md)). Because it runs as a service worker, the app must be
 served from `localhost` or over HTTPS: opening the dev server from a phone via a LAN IP will not work.
 
@@ -143,6 +143,9 @@ src/lib/money.internal.ts    Formatting mechanics, split out for direct testing
 src/lib/time.ts              Business-day boundaries (WAT)
 src/api/contracts.ts         Zod API contract, shared by the app and the mock server
 src/mocks/seed.ts            Seeded data: 1,200 transactions, stable across time of day, incl. hostile fixtures
+src/mocks/db.ts              Mock server state and business rules: ledger, pagination, idempotency
+src/mocks/handlers.ts        Mock API HTTP layer (MSW)
+src/mocks/browser.ts         Starts the mock as a service worker
 src/**/*.test.ts             Unit, property-based, contract, seed and lint-guard tests
 src/source-hygiene.test.ts   Fails on raw invisible, bidirectional or look-alike characters
 docs/adr/                    Architecture Decision Records

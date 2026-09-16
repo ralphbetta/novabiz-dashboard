@@ -55,7 +55,14 @@ changing the thing it covers.**
 
 This is the most important rule in the repo and the one most likely to be "helpfully" undone.
 
-- A `4xx` with an explicit rejection → the server wrote nothing → **safe to roll back**.
+- Only a response body with `error.rejected: true` → no transfer exists under the key, and none ever
+  will → **safe to roll back**. Decide from that flag, **never from the status code**.
+- **A `404` from the reconciliation lookup is NOT safe to roll back on.** The original POST may still
+  be in flight. Stay `unknown` and keep polling. (An earlier version of ADR-0006 got this wrong.)
+- **A `409 IDEMPOTENCY_KEY_REUSED` is NOT safe to roll back on.** It only happens because something
+  already exists under the key. Look it up.
+- Do not change a `false` in `REJECTED_BY_CODE` (`src/api/contracts.ts`) to `true`, and do not stop the
+  mock binding rejections to their key. Either would make the server promise something it can't keep.
 - A timeout, a network error, or a `5xx` → **you do not know what happened** → the transfer may
   have gone through → go to the `unknown` state and reconcile. **Do not restore the balance.**
 - `isDefiniteFailure()` in `src/lib/errors.ts` is the only thing allowed to make that call.
@@ -150,6 +157,25 @@ explaining the invariant. No `@ts-expect-error` without a linked issue.
 - The E2E test `send-money.spec.ts › timeout on a committed transfer` is load-bearing. **If your
   change makes it fail, your change is wrong** — do not adjust the test to match the new
   behaviour without reading `docs/adr/ADR-0006-optimistic-send.md` first. → `docs/adr/ADR-0011-testing.md`
+
+### Fixing a bug or a review finding: failing test first
+
+Every bug fix and every review finding follows this order:
+
+1. **Write a test that reproduces the problem** before changing the code it tests.
+2. **Run it against the unfixed code and confirm it fails.** Report what failed. If you cannot write
+   a test that fails, the finding is unconfirmed: say so instead of fixing it on faith.
+3. **Check it fails for the right reason.** Read the failing assertion. A test that fails during
+   setup, or passes against the broken code, proves nothing. Example from this repo: the
+   insufficient-funds binding test first passed on the unfixed code because the balance never changed
+   between the two attempts. It had to be rewritten so the broken code could fail it.
+4. **Then fix the code**, and confirm the same test now passes without loosening its assertions.
+5. **Keep the test** as the regression guard. `src/mocks/review-findings.test.ts` is the model.
+
+If an existing test encodes the wrong behaviour, rewrite it along with its premise and its title.
+Don't just change the expected value until it passes. Say which test changed and why.
+
+Changes to prose alone (docs, comments) don't need a test.
 
 ---
 

@@ -172,7 +172,7 @@ without Intl V3 string input; and a lint guard with a test proving it fires.
 
 ---
 
-### Phase 2 — The mock server (≈4h) ⭐ — ◐ part 1 of 3 done
+### Phase 2 — The mock server (≈4h) ⭐ — ◐ parts 1–2 of 3 done
 
 **Part 1 — done: contracts and seed data.**
 - [src/api/contracts.ts](../src/api/contracts.ts) — Zod schemas for every endpoint. Wire (plain
@@ -191,10 +191,42 @@ without Intl V3 string input; and a lint guard with a test proving it fires.
   because debit amounts dwarfed credits; the first correction produced zero. A test now bounds it on
   both sides.
 
-**Part 2 — next:** MSW install, in-memory ledger, the four handlers, cursor pagination, idempotent
-replay.
+**Part 2 — done: ledger, endpoints, pagination, idempotency.**
+- [src/mocks/db.ts](../src/mocks/db.ts) — all business rules, framework-free, synchronous (so a
+  check and its write can never interleave), under an injected clock. Balance derived from the ledger;
+  keyset pagination on `(createdAt, id)` with an opaque base64url cursor; transfers held against
+  available balance, settled lazily after a delay; idempotent replay and payload-mismatch refusal;
+  reconciliation lookup by key.
+- [src/mocks/handlers.ts](../src/mocks/handlers.ts) — thin HTTP layer. Every request validated against
+  the contract; every error built from `REJECTED_BY_CODE`; every handler wrapped so a crash becomes a
+  contract-valid `INTERNAL_ERROR` with `rejected: false`.
+- [src/mocks/browser.ts](../src/mocks/browser.ts) + `main.tsx` — the worker starts before first render in
+  every build unless `VITE_USE_MOCK=false`, and an insecure-context failure is reported plainly.
+- **Verified:** unit tests on the db; `msw/node` tests on every endpoint's status codes and contract
+  validity; production preview serves `mockServiceWorker.js`. **Not verified:** worker registration in
+  a real browser — no browser runner exists until Phase 8.
+- **Found by mutation testing:** making every error claim `rejected: true` passed all tests, because
+  nothing produced an `INTERNAL_ERROR`. That also exposed that a thrown exception returned MSW's
+  non-contract 500 body. Both fixed and tested.
 
-**Part 2 constraints carried forward from review — must hold:**
+**Fixed after adversarial review of Part 2** (all confirmed first by failing tests in
+[review-findings.test.ts](../src/mocks/review-findings.test.ts), then mutation-checked):
+- A lookup miss claimed `rejected: true`, telling a client to roll back while a POST could still be in
+  flight. The design error was in ADR-0006 itself. `NOT_FOUND` and `IDEMPOTENCY_KEY_REUSED` are now
+  `rejected: false`, and `rejected: true` is defined as "no transfer exists under this key and none
+  ever will".
+- Extension found while analysing that: an insufficient-funds refusal could later become a success if
+  an earlier in-flight attempt landed after the balance rose. Rejections are now bound to their key.
+- Idempotency keys are lowercased at the boundary (UUIDs are case-insensitive).
+- Seed keys are registered; pending seed rows settle; a throwing settlement outcome no longer strands a
+  transfer or breaks reads; omitted and blank narration fingerprint identically.
+- Loading message from first paint and a 15s startup timeout; `msw` moved to `dependencies`.
+
+**Open decision — mock bundle size.** ~523 kB minified / ~188 kB gzipped, awaited before first render,
+now shipped to production. Mostly zod (needed by the app anyway), msw, and MSW's unused cookie
+handling. Options recorded in the Part 2 review; to be decided before Phase 4 renders real UI.
+
+**Part 2 constraints carried forward from review — all now implemented and tested:**
 - **The cursor key is `(createdAt, id)`, never `createdAt` alone.** Timestamps tie: at exactly
   midnight WAT all of today's seed rows share one instant. A createdAt-only cursor skips or repeats
   rows at page boundaries. The seed guarantees a strict total order on the pair, and a test checks it.
@@ -225,7 +257,7 @@ Response>` store.
 | `GET /api/balance` | `{ balanceKobo, todayInflowKobo, todayOutflowKobo }` — derived, never stored |
 | `GET /api/transactions` | `?cursor=&limit=50&from=&to=&status=&type=` → `{ items, nextCursor, total }` |
 | `POST /api/transfers` | Reads `Idempotency-Key`. **Replays** on a known key. Otherwise writes a `pending` txn, returns `202`, and schedules settlement in 2–5s |
-| `GET /api/transfers?idempotencyKey=` | The reconciliation lookup (ADR 0006). `404` if never seen |
+| `GET /api/transfers?idempotencyKey=` | The reconciliation lookup (ADR 0006). Returns the transfer, or the rejection bound to the key; `404` only means "not seen yet" and is never grounds to roll back |
 
 **`chaos.ts`** — middleware wrapping every handler:
 
