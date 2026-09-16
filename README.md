@@ -15,7 +15,7 @@ view of money coming into the wallet, and a way to send money out. Built for the
 | 0 | Scaffold, strict TypeScript, lint guards, test runner | ◐ Partly done |
 | 1 | Money module — kobo integers, formatting, parsing | ✅ Done |
 | 2 | MSW mock API — seeded ledger, pagination, idempotency, chaos controls | ◐ Mock API complete; chaos panel UI, saved settings and "Mock API" badge pending (need the Phase 3 store) |
-| 3 | Data layer — Redux Toolkit store, RTK Query endpoints | Not started |
+| 3 | Data layer — Redux Toolkit store, RTK Query endpoints | ◐ Built and tested; not yet used by a screen |
 | 4 | Balance summary + virtualised transaction feed | Not started |
 | 5 | Send Money wizard | Not started |
 | 6 | Optimistic update reconciliation | Not started |
@@ -103,24 +103,25 @@ constant (`const K = 100; amount / K`) or chained division (`amount / 10 / 10`).
 needs data-flow analysis. Both are pinned as uncaught by tests, so the documentation cannot drift
 into claiming otherwise.
 
-## Architecture — decided, not yet built
+## Architecture
 
-These decisions are recorded as ADRs. None of the code below exists yet.
+Recorded as ADRs. Each item says whether it is built.
 
-**State and data fetching: Redux Toolkit with RTK Query.** Almost all state here is a cached copy
+**State and data fetching: Redux Toolkit with RTK Query** *(built — `src/api`, `src/store`; no screen uses
+it yet)*. Almost all state here is a cached copy
 of server data — balance, feed, transfer results — which RTK Query manages: caching, pagination,
 loading and error states, optimistic patches. The little genuinely client-owned state (the Send
 Money draft, theme) lives in plain RTK slices in the same store, so there is one store and one
 DevTools timeline. TanStack Query was the close alternative. →
 [ADR-0003](docs/adr/ADR-0003-server-state.md), [ADR-0004](docs/adr/ADR-0004-client-state.md)
 
-**Mock API: MSW at the network layer.** The app makes real HTTP requests and cannot tell it is
+**Mock API: MSW at the network layer** *(built)*. The app makes real HTTP requests and cannot tell it is
 mocked. The same handlers serve the browser, component tests and E2E tests. It will include
 simulated latency, a configurable failure rate, and deterministic "force the next request to fail
 or time out" controls, so error paths can be demonstrated on demand. →
 [ADR-0005](docs/adr/ADR-0005-mock-api.md)
 
-**Optimistic send: four states, not two.** A timeout or `5xx` does not mean the transfer failed —
+**Optimistic send: four states, not two** *(not built — Phases 5–6; `isDefiniteFailure` is built)*. A timeout or `5xx` does not mean the transfer failed —
 it may have gone through. So only an explicit rejection rolls back. An ambiguous outcome moves to
 an `unknown` state that keeps the balance reduced, tells the merchant not to resend, and reconciles
 against the server using the idempotency key. →

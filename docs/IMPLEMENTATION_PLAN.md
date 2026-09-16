@@ -313,26 +313,58 @@ original response with no second ledger entry.
 
 ---
 
-### Phase 3 — Data layer (≈2h)
+### Phase 3 — Data layer (≈2h) — ◐ built and tested; not yet rendered by any screen
 
-Store first: `configureStore` with the api reducer plus the two slices, typed `useAppDispatch` /
-`useAppSelector`, `<Provider>` in `App.tsx`, and the two-key `localStorage` subscriber for
-preferences (no `redux-persist`).
+**Built** (RTK 2.12, react-redux 9.3):
+- [src/api/baseQuery.ts](../src/api/baseQuery.ts) — waits for the data service, 15s timeout, retries reads
+  with full-jitter backoff (1s ceiling doubling, 30s cap, 3 retries), never retries 4xx or writes.
+- [src/api/novabizApi.ts](../src/api/novabizApi.ts) — `getBalance`, `getTransactions` (infinite, cursor,
+  server-side filters as the cache key), `sendMoney` (Idempotency-Key header, `maxRetries: 0`),
+  `getTransferByKey`. Every response parsed against the shared contract.
+- [src/lib/errors.ts](../src/lib/errors.ts) — `isDefiniteFailure` reads `error.rejected`, never the status.
+- [src/store](../src/store) — `makeStore` with the data-service promise as the thunk extra argument; typed hooks.
+- `main.tsx` renders immediately and starts the mock in the background; requests wait for it. A startup
+  failure is written to a live region outside React's root.
 
-Then `baseQuery.ts` — `fetchBaseQuery({ baseUrl: '/api', timeout: 15_000 })` wrapped in
-`retry(..., { maxRetries: 3 })` with jittered backoff.
+**Tested against the real mock server via msw/node:** retry counts per error type; `sendMoney` sent
+exactly once on 500, after-commit timeout, 422 and 409; the ⭐ after-commit timeout end to end through the
+store; request gating on service readiness; a contract-violating response.
 
-Then `errors.ts` with `isDefiniteFailure`, **and its unit tests now, not later**. It takes RTK
-Query's `FetchBaseQueryError | SerializedError` union and returns `true` only for an explicit
-`4xx` rejection. The table in ADR 0006 is your test case list.
+**Found while building:**
+- RTK's `responseSchema` option cannot take the contract schemas — it requires input and output types to
+  match, and they turn `number` into `Kobo`. Responses are parsed in `transformResponse` instead. A failure
+  there becomes a status-less error, which isDefiniteFailure correctly treats as not definite.
+- RTK's `retryCondition` and `maxRetries` options are mutually exclusive; with a condition, RTK stops
+  enforcing the limit. (Superseded after review: the base query now has its own retry loop.)
+- RTK types `extraOptions` as always present, but it is `undefined` for endpoints that set none. The
+  unguarded read threw inside the retry wrapper, turning every failed request into a status-less error that
+  was never retried. Caught by the integration tests on first run.
 
-Then `novabizApi.ts` with `getBalance` and `getTransactions`, cache settings per ADR 0003.
+**Fixed after adversarial review of Phase 3** (each confirmed first by a failing test in
+[src/api/review-findings.test.ts](../src/api/review-findings.test.ts), then checked by breaking the fix by hand):
+- **Any new write endpoint was retried unless it opted out.** A POST without `maxRetries: 0` was sent four
+  times on a 503. The base query now never retries a mutation, by request type.
+- **The reconciliation lookup was cached while subscribed**, so a repeat lookup returned a stale "pending".
+  Now `forceRefetch: () => true`, with a test that looks up twice across a settlement.
+- **A slow start failed for good**, even after the worker came up. Each request now waits a bounded time and
+  is refused unsent; later requests succeed once the service is ready, and the slow-start notice clears.
+- **A transfer refused during startup would have been reconciled as `unknown`.** It never left the device, so
+  `isDefiniteFailure` now treats `REQUEST_NOT_SENT` as definite. ADR-0006's table records it.
+- **Component tests could not have configured the hooks' API.** The `createNovabizApi` factory is gone; timing
+  comes from `makeStore({ http })`, so there is one API instance.
+- **A reconnect reloaded every page of a long scroll.** The feed sets `refetchCachedPages: false`.
+- **A read could take over a minute to fail.** Reads now have a 30s overall deadline.
 
-**Do not skip:** `extraOptions: { maxRetries: 0 }` goes on `sendMoney` the moment that endpoint
-exists. The `retry()` wrapper covers mutations, so without it you are auto-retrying payments.
+**Not done — deliberately moved:**
+- **The plan's "done when" — a component rendering the real balance — is not met.** No screen uses the data
+  layer yet. Phase 4's BalanceCard is the first, and is where this is verified in a browser.
+- **The preferences and transfer-draft slices** are deferred to where each is first needed: preferences with
+  the chaos panel and dark mode, the draft with Send Money. Building them now would be state nothing reads.
+- **Retry suppression while offline** (ADR-0014) is Phase 7.
 
-**Done when:** a throwaway component renders the real balance, correctly formatted, from the
-mock.
+**Measured — render-blocking chunk:** 397 kB minified / 123.5 kB gzipped. By source size: react-dom 620 kB,
+**zod 361 kB**, RTK 204 kB, immer 51 kB. Zod moved here from the mock chunk because the app now validates
+responses. Input for the open `zod/mini` decision. The mock chunk no longer blocks render (435 kB / 164 kB gz).
 
 ---
 
@@ -401,6 +433,12 @@ matters: **timeout on a transfer the server DID commit**. The row must survive a
 must not be restored.
 
 **Done when:** all four failure modes behave per ADR 0006, demonstrated by hand.
+
+**Also required in this phase, not Phase 7:** on reconnect, reconcile every `unknown` transfer *before* any
+query refetches. RTK Query's `refetchOnReconnect` is already on (Phase 3). Once optimistic transfers exist, a
+reconnect would otherwise refetch the balance over an unresolved transfer and overwrite the optimistic
+change — the exact false "nothing moved" ADR-0006 prevents. If Phase 6 cannot do this ordering, turn
+`refetchOnReconnect` off until it can.
 
 ---
 

@@ -97,6 +97,26 @@ which is the hardest requirement in the brief.
 - **RTK Query's infinite query support is newer** than TanStack Query's equivalent — see
   ADR 0008 for how we handle that, including the pre-2.8 fallback.
 
+## Implementation notes
+
+Recorded during Phase 3, where the library behaved differently from what this ADR assumed:
+
+- **Response validation uses `transformResponse`, not RTK's `responseSchema`.** `responseSchema` requires a
+  schema whose input and output types match; the contract schemas turn a plain `number` into a branded
+  `Kobo`, so they do not typecheck there. Parsing in `transformResponse` keeps components typed with `Kobo`.
+  A response that fails the contract becomes a status-less error, which `isDefiniteFailure` treats as not a
+  definite failure — correct, since the server may have acted.
+- **The base query has its own retry loop instead of RTK's `retry()` wrapper.** Two reasons. `retry()`'s backoff
+  function cannot read the store, so timing config would have to live on the API instance — and the hooks are
+  bound to one instance, so tests could not configure the API their components use. And with `retryCondition`,
+  `retry()` stops enforcing its retry limit. The loop never retries a mutation, whatever the endpoint says.
+- **Timing, base URL and data-service readiness are the thunk extra argument.** There is one API, bound to the
+  hooks; each store — and each test — supplies its own configuration through `makeStore`.
+- **`extraOptions` is typed as always present but is `undefined` for endpoints that set none.** Guarded.
+- **`keepUnusedDataFor: 0` does not make a query fresh.** It only drops the entry once nothing subscribes; a
+  subscribed repeat returns the cache. The reconciliation lookup uses `forceRefetch: () => true`.
+- **An infinite query refetches every cached page by default.** The feed sets `refetchCachedPages: false`.
+
 ## How we would know we were wrong
 
 - We start writing manual slices that mirror RTK Query cache data to make something work.

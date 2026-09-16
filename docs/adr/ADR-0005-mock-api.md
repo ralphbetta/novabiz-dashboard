@@ -172,8 +172,12 @@ safety depends on that. Persisting the mock's state to browser storage would clo
 and is recorded as an open option rather than built.
 
 *Startup never leaves a blank page.* `index.html` shows a loading message from first paint, before any
-JavaScript. If the worker has not started within 15 seconds, the page says so and asks for a reload,
-rather than staying blank.
+JavaScript. The app then renders at once and requests wait for the worker, each for a bounded time; a
+request that runs out of time is refused *without being sent*. A slow start is not final: if the worker has
+not started within 15 seconds the page says it is taking longer than usual, and the notice clears when it
+does start, after which requests succeed. An earlier version turned the 15s timeout into a permanent failure
+that only a reload could clear, even if the worker started a second later. Only a real failure — the worker
+refusing to register — asks for a reload.
 
 *Unexpected errors are contract-valid.* Every handler is wrapped so a thrown exception becomes a
 `500 INTERNAL_ERROR` with `rejected: false`, never MSW's generic 500 body. A crash part-way through a

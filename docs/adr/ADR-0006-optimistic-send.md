@@ -142,6 +142,12 @@ none ever will.** With RTK Query's `FetchBaseQueryError` union:
 | `{ status: 'TIMEOUT_ERROR' }` | No — unknown |
 | `500 INTERNAL_ERROR`, `rejected: false`, or any other `5xx` | No — unknown |
 | `{ status: 'PARSING_ERROR' }` | No — the server may have acted |
+| `CUSTOM_ERROR` with `REQUEST_NOT_SENT` | **Yes** — the base query refused it before calling fetch; nothing left the device |
+
+The last row is the one certain failure that does not come from the server. If the data service never became
+ready, the base query refuses the request without sending it. Treating that as `unknown` would start reconciling
+against a service that is not running, for a transfer that provably never left the device. It is produced in
+exactly one place, before fetch is called, and must never be produced anywhere a request may have been sent.
 
 A status code alone is not evidence. An earlier draft of this table listed `409` as a definite
 failure, but a `409` is only possible *because* a transfer already exists under that key.

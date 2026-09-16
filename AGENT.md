@@ -69,7 +69,9 @@ This is the most important rule in the repo and the one most likely to be "helpf
   Every `onQueryStarted` catch block must branch on it. A bare `catch { patch.undo() }` is a bug
   even though it is what the RTK Query docs show.
 - `'TIMEOUT_ERROR'`, `'FETCH_ERROR'`, `'PARSING_ERROR'` and any `5xx` are **not** definite
-  failures. Only an explicit `4xx` rejection is.
+  failures. Only two things are: a body with `error.rejected: true`, and `REQUEST_NOT_SENT` — a request the
+  base query refused before calling fetch. Never produce `REQUEST_NOT_SENT` anywhere a request may already
+  have been sent.
 
 Rolling back on a timeout tells a merchant their money is safe when it may already be gone. They
 resend, and pay twice.
@@ -89,9 +91,10 @@ boolean.** The `unknown` state is the entire point. → `docs/adr/ADR-0006-optim
 
 ### 4. Reads may retry automatically. Writes may not.
 
-- `extraOptions: { maxRetries: 0 }` on the transfer mutation. RTK Query's `retry()` wrapper sits
-  on the base query and covers mutations too, so this opt-out is the only thing preventing
-  automatic retry of a payment. Do not "tidy" it away.
+- **The base query never retries a mutation**, whatever the endpoint's options say. A new write endpoint is
+  safe by default. Do not weaken that check in `src/api/baseQuery.ts`; `review-findings.test.ts` adds an
+  unguarded POST and asserts it is sent once.
+- `sendMoney` also carries `extraOptions: { maxRetries: 0 }` as a second, visible guard. Keep it.
 - Reads retry with exponential backoff **and full jitter**. The jitter is not optional.
 - A failed transfer surfaces a *Try again* button. A human decides. → `docs/adr/ADR-0014-offline-retry.md`
 
@@ -223,9 +226,14 @@ here. If you are about to produce one, produce the alternative instead.
 | `` `₦${(kobo/100).toFixed(2)}` `` | Float division, no locale grouping, breaks negatives. → `formatNaira()` |
 | `try { await queryFulfilled } catch { patchResult.undo() }` | **The RTK Query documented pattern**, and a money-losing bug here — a bare `catch` cannot tell a `422` from a timeout. Rule 2. |
 | Generating the idempotency key inside the request function | Every retry gets a new key. Rule 3. |
-| Removing `extraOptions: { maxRetries: 0 }` from `sendMoney` | The `retry()` wrapper covers mutations too, so this opt-out is load-bearing. Auto-retries a payment. Rule 4. |
+| Letting the base query retry a mutation, or making write safety depend on each endpoint opting out | A write added later would be sent up to four times. The base query refuses by `api.type`. Rule 4. |
 | `dangerouslySetInnerHTML` for a description | Rule 5. |
 | `useState` in the wizard parent for the draft | Lost on navigation. → `docs/adr/ADR-0004-client-state.md` |
+| `responseSchema: SomeContractSchema` on an RTK endpoint | Does not typecheck: contract schemas turn `number` into `Kobo`. Parse in `transformResponse`. → `docs/adr/ADR-0003-server-state.md` |
+| Reading `extraOptions.x` in the base query without `?.` | `extraOptions` is `undefined` at runtime for endpoints that set none, whatever its type says. |
+| Wrapping the base query in RTK's `retry()` again | Its backoff cannot read the store's timing config, and with `retryCondition` it stops enforcing the retry limit. The base query has its own loop. |
+| Relying on `keepUnusedDataFor: 0` to make a lookup fresh | It only drops the entry once nothing subscribes. A subscribed repeat lookup returns the cache. Use `forceRefetch`. |
+| Building a second API instance for tests with `createNovabizApi`-style factories | Hooks are bound to the one `novabizApi`. Configure timing through `makeStore({ http })` instead. |
 | Reconciliation in a `useEffect` | Dies when the merchant navigates away mid-transfer. It belongs in listener middleware. → `docs/adr/ADR-0006-optimistic-send.md` |
 | `invalidatesTags: ['Transactions']` after every send | Refetches the whole feed on a slow connection. Patch instead. |
 | Hand-written thunks + slices for server data | That is the Redux RTK Query exists to delete. → `docs/adr/ADR-0003-server-state.md` |

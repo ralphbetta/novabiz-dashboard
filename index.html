@@ -7,7 +7,10 @@
     <title>NovaBiz Merchant Dashboard</title>
   </head>
   <body>
-    <!-- Visible from first paint, before any JavaScript runs. React replaces it on render. -->
+    <!-- Filled only if the data service cannot start. Present and empty from first paint, so a screen
+         reader announces the message when it appears (ADR-0012). Outside #root, so React never replaces it. -->
+    <div id="startup-alert" role="alert"></div>
+    <!-- Visible until React renders, which it now does immediately rather than after the mock API starts. -->
     <div id="root"><p role="status">Loading NovaBiz…</p></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

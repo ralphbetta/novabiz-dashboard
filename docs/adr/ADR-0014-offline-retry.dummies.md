@@ -31,13 +31,18 @@ know whether the first attempt landed.
 ## The RTK Query gotcha — know this one
 
 RTK Query's `retry()` wrapper sits on the **base query**, so it covers **mutations as well as
-queries** by default.
+queries** by default. **Uniform retry isn't something you switch on — it's what you get unless you opt out.**
 
-**Uniform retry isn't something you switch on here — it's what you get unless you opt out.**
+The first version handled that by having the transfer endpoint opt out with `maxRetries: 0`. Review then
+asked: *what about the next write endpoint someone adds?* It tried it — a new POST that forgot the setting
+was sent **four times**.
 
-So the transfer endpoint carries an explicit `extraOptions: { maxRetries: 0 }`. That's one line.
-Deleting it by accident auto-retries payments. It has a comment naming the ADR and a test
-asserting it.
+So now the base query itself refuses to retry **any** write, by checking the request type. The safe thing
+is the default; nobody has to remember anything. `sendMoney` still carries `maxRetries: 0` as a second
+guard you can see.
+
+**Say this:** *"Write safety can't depend on every future endpoint remembering an opt-out, so the request
+layer never retries a mutation, full stop."*
 
 ## Why jitter isn't decoration
 

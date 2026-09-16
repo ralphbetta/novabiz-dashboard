@@ -253,6 +253,24 @@ transaction row could show the same amount differently.
   adversarial review; each confirmed by a failing test, which for the random-draw case showed the per-request
   counts varying between 4 and 5. Manual mutation checks run earlier had not found it, so the plan no longer
   reports mutation counts as if they were evidence of completeness.
+- **Trusting a library's types over its runtime behaviour.** In the RTK Query base query, the retry
+  condition read `extraOptions.maxRetries`. RTK types `extraOptions` as always present; at runtime it is
+  `undefined` for any endpoint that sets none. The read threw inside RTK's retry wrapper, so every failed
+  request — a 404, a 500, a timeout — surfaced as a status-less JavaScript error that was never retried.
+  Nothing unsafe would have happened (`isDefiniteFailure` returns false), but no screen could have told a
+  timeout from a 404. Caught on the first run of integration tests written against the real mock server;
+  the failure was read before fixing, per AGENT.md. Two other library assumptions were checked by probe
+  before any code relied on them: RTK's `responseSchema` turned out not to accept the contract schemas, and
+  `retryCondition` turned out to disable RTK's own retry limit.
+- **An unsafe default, documented as a rule instead of enforced.** The data layer retried every endpoint by
+  default, and write safety depended on each write endpoint opting out with `maxRetries: 0`. `AGENT.md` even
+  warned against removing that line from `sendMoney` — while nothing protected the next write anyone added.
+  Review added one: sent four times on a 503. **Fix:** the base query refuses to retry any mutation by request
+  type. The same review found a lookup described as "never cached" that was cached while subscribed, which
+  would have fed Phase 6's polling a stale "pending"; a slow startup that became a permanent failure; and a
+  transfer refused before sending that would have been reconciled as `unknown`. Each confirmed by a failing test
+  first. Two of those tests initially failed for the wrong reason — a wrong import and a misused `unsubscribe`
+  — and were corrected before they were counted as confirmations.
 - **A stale code sample.** The implementation plan's Phase 1 section still held the buggy fallback
   from §3.1 after the source was fixed. The sample was removed and replaced with links to the real
   files.
