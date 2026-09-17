@@ -26,6 +26,11 @@ dist-ssr
 # Test coverage output
 coverage
 
+# Playwright output
+test-results
+playwright-report
+blob-report
+
 # Personal interview preparation notes — not a project deliverable
 docs/INTERVIEW-PREP.md
 

@@ -194,7 +194,9 @@ npm run typecheck   # tsc
 
 Also: `npm run build`. The MSW mock starts with `npm run dev` automatically.
 
-Not yet wired — do not assume these exist: `npm run e2e` (Playwright, Phase 8). There is no
+`npm run e2e` runs the Playwright suite (`e2e/`) against a production build at 360px and 1440px; about 3 minutes, most of
+it one test that waits out real reconciliation. `npm run e2e:desktop` runs one viewport. Set `PLAYWRIGHT_CHANNEL=chrome`
+to use an installed Chrome if Playwright's Chromium is not downloaded. There is no
 `eslint-plugin-jsx-a11y` (it does not support ESLint 10); accessibility is checked with axe in component tests
 (`src/test/axe.ts`).
 
@@ -283,6 +285,8 @@ here. If you are about to produce one, produce the alternative instead.
 | Trusting the saved mock database | It is user-controlled storage: validate it (`loadMockDbSnapshot`) and fall back to the seed. |
 | A retry that assumes the first attempt's optimistic change is still cached | A released reconnect refetch may have replaced it. Add the row where missing and refetch the balance. |
 | Saving the mock database without checking for a reset in progress | A scheduled or late save writes the old data back. Save through `createMockPersistence`. |
+| An E2E test that needs an unknown outcome to last, but lets reconciliation find it first | It resolves about a second after the timeout. Raise the mock's latency once the POST is on its way (see `e2e/send-money.spec.ts`). |
+| Treating Playwright offline mode as "the mock is unreachable" | The mock runs in a service worker and still answers. Offline tests assert that reconciliation *pauses*, not that requests fail. |
 | A module-level flag for "first render" | Breaks under StrictMode and across tests. Use a per-instance `useRef`. |
 
 ---

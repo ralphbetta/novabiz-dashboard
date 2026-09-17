@@ -20,7 +20,7 @@ view of money coming into the wallet, and a way to send money out. Built for the
 | 5 | Send Money wizard — account lookup, recent recipients, optimistic send, settlement tracking | ◐ Built and tested; not yet reviewed |
 | 6 | Reconciling transfers whose outcome is unknown | ◐ Built and tested; not yet reviewed |
 | 7 | Offline handling, retry, dark mode | Not started |
-| 8 | Component + Playwright E2E tests | Not started |
+| 8 | Component + Playwright E2E tests | ✅ Done: 684 unit and component tests; 8 Playwright flows at 360px and 1440px |
 | 9 | Docs, accessibility pass, polish | Not started |
 
 ## Running it
@@ -44,9 +44,35 @@ npm run test:watch  # Vitest, watch mode
 npm run lint        # ESLint, including the money and HTML-injection guards
 npm run typecheck   # TypeScript
 npm run build       # Type-check and production build
+npm run e2e         # Playwright, against a production build, at 360px and 1440px (about 3 minutes)
 ```
 
-All five currently pass.
+All six currently pass. `npm run e2e` needs a browser: `npx playwright install chromium` once, or run it with
+`PLAYWRIGHT_CHANNEL=chrome` to use an installed Google Chrome.
+
+To watch the tests run:
+
+```bash
+npm run e2e:ui                    # a window listing every test: run one, then step through it with screenshots
+npm run e2e:headed                # every test with the browser visible, one at a time
+npm run e2e:headed -- -g "3 ⭐"    # one test, by part of its name
+npm run e2e:debug -- -g "3 ⭐"     # pause before each step, at desktop size
+```
+
+**What the Playwright suite covers** (`e2e/send-money.spec.ts`), asserting money against the mock's ledger by idempotency
+key, not only the screen:
+1. Happy path: ₦1,000.50 sent, settles, balance moves by exactly 100,050 kobo.
+2. Definite failure: the server refuses; the row is removed, the balance restored, the failure announced.
+3. **Timeout on a transfer the server recorded:** the row reads *Awaiting confirmation*, is not removed, reconciliation
+   resolves it, and the ledger holds it exactly once.
+4. *Try again* after an unconfirmed transfer sends the same key and creates one transfer (desktop only; waits out about
+   two minutes of real reconciliation).
+5. Offline mid-send: checking pauses without a connection, resumes on reconnect, no duplicate.
+6. No page scrolls sideways; the phone menu closes with its close button.
+7. After a reload: a sent transfer is still there, and an unconfirmed one is found and settles.
+
+Each flow was checked to fail when the behaviour it protects is broken (for example, rolling back on every error fails
+flow 3, and a new key on *Try again* fails flow 4).
 
 ## Trying the failure modes
 
@@ -261,3 +287,4 @@ docs/IMPLEMENTATION_PLAN.md  Phased build plan and progress
 AGENT.md                     Standing instructions for AI coding tools in this repo
 AI_USAGE.md                  How AI tools were used, including where they were wrong
 ```
+# novabiz-dashboard

@@ -10,7 +10,12 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "e2e": "playwright test",
+    "e2e:desktop": "playwright test --project=desktop",
+    "e2e:headed": "playwright test --headed --workers=1",
+    "e2e:ui": "playwright test --ui",
+    "e2e:debug": "playwright test --debug --project=desktop"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

@@ -103,6 +103,31 @@ the test.
 70–80% coverage; the remaining percentage is mostly presentational markup, where a test costs
 maintenance and catches nothing.
 
+## Implementation notes (Phase 8)
+
+- **Where:** `e2e/send-money.spec.ts` and `e2e/support.ts`; `playwright.config.ts` runs a production build through
+  `vite preview`, with a `desktop` (1440×900) and a `mobile` (360×800, touch) project. Each test has a fresh browser
+  context, so fresh localStorage and a mock starting from the seed.
+- **Money is asserted against the mock's ledger**, fetched inside the page by idempotency key (captured from the POST's
+  header) and in kobo, as this ADR asked — not only against text on screen.
+- **Failures are forced through the Mock API panel or `window.novabizChaos`.** Flow 3 uses the panel, as a reviewer would.
+  To see *Awaiting confirmation* before reconciliation resolves it (about a second after the 15s timeout), the test raises
+  the mock's latency once the POST is on its way.
+- **Flow 2 needs a real `422`.** The form will not send more than the balance it shows, so the test spends almost all of
+  it with a transfer made outside the app; the app's own check passes and the server refuses.
+- **Flow 4 runs at desktop size only** and takes about 2.5 minutes: *Try again* appears only after real reconciliation
+  gives up. The same rule is covered in milliseconds by store tests with shortened timings.
+- **Flow 5 and the mock's service worker:** Playwright's offline mode does not stop a service-worker mock from answering,
+  so the test asserts what matters — no reconciliation checks while offline, checking resumes on reconnect, and one ledger
+  entry — rather than failed requests.
+- **Added:** two flows after a reload (a sent transfer is still there; an unconfirmed one is found and settles), and the
+  phone menu's close button.
+- **Proven to catch regressions:** rolling back on every error fails flow 3; skipping the undo after a definite failure
+  fails flow 2; not pausing while offline fails flow 5; a new key on *Try again* fails flow 4; not restoring the mock's
+  saved data fails both reload flows.
+- **Browser:** Playwright's Chromium, or `PLAYWRIGHT_CHANNEL=chrome` for an installed Chrome. Playwright's download failed
+  repeatedly on this network, so the suite was run with the installed Chrome.
+
 ## Consequences
 
 *What it buys:* the tests map one-to-one onto the ways this app can actually hurt a merchant.

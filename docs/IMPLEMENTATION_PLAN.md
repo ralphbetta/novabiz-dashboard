@@ -624,7 +624,19 @@ persisted via the preferences slice subscriber. Contrast test over the token val
 
 ---
 
-### Phase 8 — Tests (≈4h)
+### Phase 8 — Tests (≈4h) — ✅ done (awaiting review)
+
+**Built:** Playwright suite (`npm run e2e`) against a production build at 360px and 1440px: the six ADR-0011 flows plus the
+phone menu and two reload flows — 12 passing runs and 2 skipped by design (flow 4 runs at desktop size only; the drawer
+test at phone size only). Money asserted against the mock's ledger by idempotency key. Each flow was broken on purpose and
+failed (see ADR-0011's notes). Component tests were already written phase by phase (684 now), including axe and the
+keyboard-only wizard. Details and trade-offs in ADR-0011 — *Implementation notes (Phase 8)*.
+
+**Found while building:** flow 3's first run could not see *Awaiting confirmation*: reconciliation resolved the transfer
+about a second after the timeout, before the test looked. The test now slows the mock once the POST is on its way. One
+mutation check first broke the build's type check rather than the behaviour, so no test ran; it was redone with a change
+that compiles.
+
 
 Component tests per ADR 0011, including the keyboard-only wizard traversal and axe on
 every screen. Then the six Playwright flows. **Write test 3 (timeout-but-committed) first** —
