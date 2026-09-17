@@ -82,10 +82,12 @@ export function StepHeading({ children, description }: { children: ReactNode; de
  * The step's buttons. On phones they stick to the bottom of the screen, so the next action never needs a scroll; from
  * 640px they sit at the end of the form.
  */
-export function StepActions({ children }: { children: ReactNode }) {
+export function StepActions({ children, note }: { children: ReactNode; note?: ReactNode }) {
   return (
-    <div className="sticky bottom-0 -mx-5 mt-6 flex flex-col-reverse gap-3 rounded-b-3xl border-t border-border bg-surface px-5 py-4 sm:static sm:mx-0 sm:mt-8 sm:flex-row sm:justify-between sm:border-0 sm:p-0">
-      {children}
+    <div className="sticky bottom-0 -mx-5 mt-6 rounded-b-3xl border-t border-border bg-surface px-5 py-4 sm:static sm:mx-0 sm:mt-8 sm:border-0 sm:p-0">
+      {/* Inside the sticky bar, so on a phone it is seen beside the buttons it explains, not scrolled behind them. */}
+      {note ? <div className="mb-3">{note}</div> : null}
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">{children}</div>
     </div>
   )
 }

@@ -6,12 +6,13 @@ import { Button } from '../../components/ui/Button'
 import { Icon } from '../../components/ui/Icon'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { TransactionRow } from './TransactionRow'
+import { OfflineNote } from '../connection/OfflineNote'
 
 const RECENT_COUNT = 6
 
 /** The latest few transactions on the dashboard, with a link to the full, filterable table. */
 export function RecentTransactions() {
-  const { currentData, error, isFetching, refetch } = useGetTransactionsPageQuery({ filters: {}, limit: RECENT_COUNT, cursor: null })
+  const { currentData, error, isFetching, refetch, fulfilledTimeStamp } = useGetTransactionsPageQuery({ filters: {}, limit: RECENT_COUNT, cursor: null })
   // A transfer just sent is added to the top of this page before the server answers, so keep to the latest few.
   const rows = (currentData?.items ?? []).slice(0, RECENT_COUNT)
   const now = new Date()
@@ -22,6 +23,7 @@ export function RecentTransactions() {
         <div>
           <h2 id="recent-heading" className="text-lg font-semibold text-fg">Recent transactions</h2>
           <p className="text-sm text-fg-muted">Your latest payments in and out.</p>
+          <OfflineNote loadedAt={currentData ? fulfilledTimeStamp : undefined} className="font-medium text-pending" />
         </div>
         <Link
           to="/dashboard/transactions"

@@ -8,6 +8,8 @@ import { useAnnounce } from '../../components/feedback/announcerContext'
 import { Button, IconButton } from '../../components/ui/Button'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { Skeleton } from '../../components/ui/Skeleton'
+import { useAppSelector } from '../../store/hooks'
+import { selectOnline } from '../../store/connectivitySlice'
 
 const HIDDEN = '••••••'
 
@@ -21,6 +23,7 @@ export function BalanceOverview() {
   const { data, error, isLoading, isFetching, refetch } = useGetBalanceQuery()
   const [hidden, setHidden] = useState(false)
   const announce = useAnnounce()
+  const online = useAppSelector(selectOnline)
   // Both refs change without waiting for a render. `disabled={isFetching}` alone cannot stop a second quick click:
   // RTK batches the pending update, so the button can still be enabled when the second click lands.
   const refreshing = useRef(false)
@@ -93,7 +96,7 @@ export function BalanceOverview() {
                     <span>{hidden ? HIDDEN : formatNaira(onHold)} on hold for pending transfers</span>
                   ) : null}
                   <span>
-                    {error ? 'Couldn’t refresh · as of ' : 'Updated '}
+                    {!online ? 'Offline · as of ' : error ? 'Couldn’t refresh · as of ' : 'Updated '}
                     {formatTime(new Date(data.asOf))}
                   </span>
                 </div>

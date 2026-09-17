@@ -288,6 +288,10 @@ here. If you are about to produce one, produce the alternative instead.
 | An E2E test that needs an unknown outcome to last, but lets reconciliation find it first | It resolves about a second after the timeout. Raise the mock's latency once the POST is on its way (see `e2e/send-money.spec.ts`). |
 | An E2E money check that only reads the mock's balance | The app changes the *shown* balance optimistically; the server's figure cannot catch the app putting it back. Read `shownAvailableKobo` too. |
 | Checking "no duplicate" by idempotency key alone | A second send carries a new key. Also check the server's balance moved by exactly one amount. |
+| Reading RTK Query's `config.online` for the offline banner or Send button | The reconnect guard holds `onOnline` back while a transfer's outcome is open, so it lags the real connection. Use `selectOnline` (`src/store/connectivitySlice.ts`). → ADR-0014 |
+| `disabled` on an action that is unavailable offline | A disabled button cannot be focused, so a keyboard or screen reader user never hears why. Use `aria-disabled` with the reason linked by `aria-describedby`, and refuse in the thunk too. |
+| Queueing a transfer to send when the connection returns | A surprise debit minutes later. Refuse and keep the details; the merchant sends. → ADR-0014 |
+| Reading the theme only in React | The page paints light first. `index.html` applies the saved theme before any script loads. → ADR-0010 |
 | Treating Playwright offline mode as "the mock is unreachable" | The mock runs in a service worker and still answers. Offline tests assert that reconciliation *pauses*, not that requests fail. |
 | A module-level flag for "first render" | Breaks under StrictMode and across tests. Use a per-instance `useRef`. |
 

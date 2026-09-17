@@ -1,10 +1,11 @@
 import { lazy, Suspense, useRef, type ReactNode } from 'react'
 import { Icon } from '../components/ui/Icon'
 import { IconButton } from '../components/ui/Button'
-import { formatLongDate } from '../lib/format'
 import { MERCHANT } from './merchant'
 import { NavList } from './navigation'
 import { OpenTransferNotice } from './OpenTransferNotice'
+import { ThemeToggle } from './ThemeToggle'
+import { ConnectionBanner } from '../features/connection/ConnectionBanner'
 import { useMockControls } from '../features/mockControls/mockControlsContext'
 
 /**
@@ -69,6 +70,8 @@ function SidebarContent({ onNavigate, onClose }: { onNavigate?: () => void; onCl
       <nav aria-label="Main" className="flex-1">
         <NavList {...(onNavigate ? { onNavigate } : {})} />
       </nav>
+      {/* The phone menu only, below 640px: there the top bar has no room for the toggle. */}
+      {onClose ? <div className="sm:hidden"><ThemeToggle placement="menu" /></div> : null}
       <MerchantCard />
     </div>
   )
@@ -124,7 +127,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
             <p className="text-base font-semibold text-fg">{title}</p>
             <div className="ml-auto flex items-center gap-4">
               <MockApiSlot />
-              <p className="hidden text-sm text-fg-muted md:block">{formatLongDate(new Date())}</p>
+              <div className="hidden sm:block"><ThemeToggle /></div>
               <span className="hidden h-6 w-px bg-border md:block" aria-hidden="true" />
               <div className="flex items-center gap-3">
                 <span className="hidden text-right leading-tight sm:block">
@@ -137,6 +140,8 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
               </div>
             </div>
           </div>
+          {/* In the sticky header, so it stays in view on every page while the connection is gone. */}
+          <ConnectionBanner />
         </header>
 
         <main id="main" tabIndex={-1} className="mx-auto max-w-[96rem] px-4 pt-6 pb-16 focus:outline-none sm:px-6 lg:px-8">

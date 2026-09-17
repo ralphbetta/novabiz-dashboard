@@ -17,10 +17,10 @@ view of money coming into the wallet, and a way to send money out. Built for the
 | 2 | MSW mock API — seeded ledger, pagination, idempotency, chaos controls, Mock API panel | ✅ Done (panel built after Phase 6) |
 | 3 | Data layer — Redux Toolkit store, RTK Query endpoints | ✅ Done; used by the dashboard screens |
 | 4 | Dashboard layout, balance summary, paginated transactions table | ✅ Done |
-| 5 | Send Money wizard — account lookup, recent recipients, optimistic send, settlement tracking | ◐ Built and tested; not yet reviewed |
-| 6 | Reconciling transfers whose outcome is unknown | ◐ Built and tested; not yet reviewed |
-| 7 | Offline handling, retry, dark mode | Not started |
-| 8 | Component + Playwright E2E tests | ◐ Built and tested; not yet reviewed (684 unit and component tests; 9 Playwright tests at 360px and 1440px) |
+| 5 | Send Money wizard — account lookup, recent recipients, optimistic send, settlement tracking | ✅ Done |
+| 6 | Reconciling transfers whose outcome is unknown | ✅ Done |
+| 7 | Offline banner, Send refused offline, no read retries offline, dark mode toggle | ◐ Built and tested; not yet reviewed |
+| 8 | Component + Playwright E2E tests | ✅ Done (705 unit and component tests; 11 Playwright tests at 360px and 1440px, including Phase 7's two) |
 | 9 | Docs, accessibility pass, polish | Not started |
 
 ## Running it
@@ -59,7 +59,7 @@ npm run e2e:headed -- -g "3 ⭐"    # one test, by part of its name
 npm run e2e:debug -- -g "3 ⭐"     # pause before each step, at desktop size
 ```
 
-**What the Playwright suite covers** (`e2e/send-money.spec.ts`): 9 tests, each run at 360px and 1440px (18 runs; 16 pass,
+**What the Playwright suite covers** (`e2e/send-money.spec.ts`): 11 tests, each run at 360px and 1440px (22 runs; 20 pass,
 2 are skipped by design). Money is asserted against the mock's ledger — by idempotency key, in kobo — and, where the app
 changes it optimistically, against the balance shown on screen:
 1. **Happy path:** ₦1,000.50 appears at once as a *Pending* row with the optimistic reference, settles, and the server's
@@ -75,6 +75,10 @@ changes it optimistically, against the balance shown on screen:
 7. **After a reload:** an unconfirmed transfer is found and settles, once.
 8. **No page scrolls sideways.**
 9. **The phone menu closes with its close button** (360px only).
+10. **Offline:** a banner says so; *Send* is refused with a visible reason and nothing is sent; once the connection is
+    back, the transfer goes once.
+11. **Dark mode:** the choice applies at once and is still there after a reload — checked with the app's scripts blocked,
+    so it comes from the pre-paint script, not a flash of light first.
 
 Which regressions each test was seen to catch — and one it did not — is recorded in
 [ADR-0011](docs/adr/ADR-0011-testing.md).
@@ -101,6 +105,10 @@ Run one, then send money from `/dashboard/send-money`:
   settles. Reload during the check and the receipt comes back from the stored key.
 - `timeout-before-commit`: nothing is ever written, so every check misses; after about two minutes the receipt offers
   **Check status** and **Try again** (same key, so it cannot pay twice).
+- **Offline:** DevTools → Network → *Offline* (or turn off Wi-Fi). A banner appears under the top bar, balances and
+  lists say "Offline · as of 14:32", and *Send* says why it will not send. The mock runs in a service worker, which
+  still answers while the browser is offline, so what you see follows the browser's connection status rather than
+  failed requests.
 - Any account number starting **999** shows "No account found". Chaos settings reset when the page reloads; the mock's
   data does not (see below). Full reference:
   [ADR-0005](docs/adr/ADR-0005-mock-api.md).
@@ -162,7 +170,11 @@ no hand-written case had used an amount that large.
 - **Dropdowns** are one custom `Select` built to the WAI-ARIA combobox pattern, with full keyboard support.
   → [ADR-0017](docs/adr/ADR-0017-custom-select-and-native-dialog.md)
 - **Styling**: Tailwind v4 with colour tokens for light and dark in [src/styles/index.css](src/styles/index.css).
-  There is no theme toggle yet (Phase 7).
+  The app follows the phone's light or dark setting until the merchant presses **Dark mode** (top bar; in the menu on
+  phones), which is saved. → [ADR-0010](docs/adr/ADR-0010-styling-responsive.md)
+- **Offline**: a banner under the top bar while the browser reports no connection; the balance and transaction lists stay
+  readable, marked "Offline · as of 14:32"; *Send*, *Try again* and *Check status* stay focusable but refuse, with the
+  reason shown. Nothing is queued to send later. → [ADR-0014](docs/adr/ADR-0014-offline-retry.md)
 
 **Tests:** component tests with Testing Library and axe for the balance card (loading, error and retry, hide
 amounts, refresh announcements), pagination controls and range, recent transactions (loading, empty, error), `Select`,
@@ -259,7 +271,7 @@ The brief leaves these open; each is a judgement call, recorded so it can be cha
 - **Mock bank names are invented.** The account lookup stands in for a real name enquiry (ADR-0018).
 - **Accessibility is checked with axe in component tests, not a lint plugin.** `eslint-plugin-jsx-a11y` does not
   support ESLint 10. axe in jsdom cannot check colour contrast, so a separate test checks the token pairs.
-- **No route lazy-loading yet.** The main JavaScript chunk is about 212 kB gzipped (210 kB in a build without the mock);
+- **No route lazy-loading yet.** The main JavaScript chunk is about 215 kB gzipped after Phase 7 (212 kB before it; 210 kB in a build without the mock, measured before Phase 7);
   the Mock API panel and the mock itself load separately.
 
 ## Repository layout

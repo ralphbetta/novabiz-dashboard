@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { afterAll, afterEach, beforeAll, describe, it, expect, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { setupServer } from 'msw/node'
 import { makeStore } from '../../store'
+import { connectivity } from '../../store/connectivitySlice'
 import { createMockDb } from '../../mocks/db'
 import { createHandlers } from '../../mocks/handlers'
 import { TIMEOUT_HOLD_MS, createChaosController } from '../../mocks/chaos'
@@ -63,7 +64,7 @@ function renderOverview({ gate, errorRate = 0, announce }: { gate?: Promise<void
   }
   // The seed has pending transfers, so some money is on hold; the hide test relies on that amount being shown.
   const onHold = formatNaira(toKobo(b.ledgerBalanceKobo - b.availableBalanceKobo))
-  return { user: userEvent.setup(), chaos, amounts, onHold, container, hold, leavePage: () => rerender(tree(false)) }
+  return { user: userEvent.setup(), store, chaos, amounts, onHold, container, hold, leavePage: () => rerender(tree(false)) }
 }
 
 const section = () => screen.getByRole('region', { name: 'Account overview' })
@@ -138,6 +139,16 @@ describe('BalanceOverview', () => {
     await waitFor(() => expect(polite()).toHaveTextContent('Balance could not be updated'), { timeout: 5000 })
     expect(screen.getByText(amounts.available)).toBeInTheDocument()
     expect(screen.getByText(/Couldn.t refresh · as of/)).toBeInTheDocument()
+  })
+
+  it('keeps the balance readable while offline, marked with the time it was loaded (ADR-0014)', async () => {
+    const { store, amounts } = renderOverview()
+    expect(await screen.findByText(amounts.available, {}, { timeout: 5000 })).toBeInTheDocument()
+    expect(screen.getByText(/^Updated \d{2}:\d{2}$/)).toBeInTheDocument()
+
+    act(() => { store.dispatch(connectivity.connectionChanged({ online: false })) })
+    expect(screen.getByText(amounts.available)).toBeInTheDocument()
+    expect(screen.getByText(/^Offline · as of \d{2}:\d{2}$/)).toBeInTheDocument()
   })
 
   it('announces once when Refresh is pressed twice quickly', async () => {

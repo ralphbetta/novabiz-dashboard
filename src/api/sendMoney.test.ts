@@ -12,6 +12,7 @@ import { novabizApi as api, type TransactionsPageArgs } from './novabizApi'
 import { OPTIMISTIC_REFERENCE } from './optimisticTransfer'
 import { makeStore, type AppStore } from '../store'
 import { sendTransfer } from '../store/sendTransfer'
+import { connectivity } from '../store/connectivitySlice'
 import { TIMEOUT_HOLD_MS, createChaosController, type ForcedTransferOutcome } from '../mocks/chaos'
 import { DEFAULT_SETTLEMENT_DELAY_MS, createMockDb } from '../mocks/db'
 import { createHandlers } from '../mocks/handlers'
@@ -189,6 +190,17 @@ describe('sendMoney — review findings', () => {
     expect(await first).toBe(KEY)
     expect(keysSent).toEqual([KEY])
     expect(attempt(store)?.idempotencyKey).toBe(KEY)
+  })
+
+  it('sends nothing and changes nothing while the browser reports no connection (ADR-0014)', async () => {
+    const { store } = await setup()
+    const before = available(store)
+    store.dispatch(connectivity.connectionChanged({ online: false }))
+    expect(await store.dispatch(sendTransfer({ request: request(500_000), idempotencyKey: KEY }))).toBeNull()
+    expect(keysSent).toEqual([])
+    expect(attempt(store)).toBeNull()
+    expect(available(store)).toBe(before)
+    expect(rowFor(store)).toBeUndefined()
   })
 
   it('the endpoint alone patches the cache but never touches the Send Money draft', async () => {

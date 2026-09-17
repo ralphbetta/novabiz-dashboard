@@ -7,6 +7,8 @@ import App from './app/App'
 import { makeStore } from './store'
 import { persistOpenTransferKey, readOpenTransferKey } from './store/openTransferKey'
 import { transferDraft } from './store/transferDraftSlice'
+import { watchConnection } from './store/connectivitySlice'
+import { applyTheme, persistThemePreference, preferences, readThemePreference } from './store/preferencesSlice'
 import { IdempotencyKeySchema } from './api/contracts'
 import { STARTUP_SLOW_MS, startupMessage, type StartupProblem } from './app/startup'
 import { MockControlsProvider } from './features/mockControls/MockControlsProvider'
@@ -48,6 +50,14 @@ serviceReady.then(
 const store = makeStore({ serviceReady })
 // Enables refetchOnReconnect (ADR-0003), and the online/visibility actions the transfer tracker pauses on.
 setupListeners(store.dispatch)
+// The connection as the browser reports it, for the offline banner and the Send button (ADR-0014).
+watchConnection(store.dispatch)
+
+// The theme: the saved choice, or the phone's setting (ADR-0010). index.html has already applied it before first paint.
+const localStore = (() => { try { return window.localStorage } catch { return undefined } })()
+store.dispatch(preferences.themeChosen({ theme: readThemePreference(localStore) }))
+persistThemePreference(store, localStore)
+applyTheme(store, document.documentElement, typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)') : undefined)
 
 // A transfer whose outcome was still open when the page went away: check it again (ADR-0004, ADR-0006). The stored
 // value is untrusted input, so only a well-formed key is used.

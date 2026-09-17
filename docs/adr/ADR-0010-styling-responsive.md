@@ -108,6 +108,25 @@ Recorded while building Phase 4, where the implementation differs in detail from
   now come only from variants. And `not-sr-only` resets padding to 0, which misaligned the table header until the padding
   moved to an inner element.
 
+## Implementation notes (Phase 7: dark mode)
+
+- **Three preferences, one button.** The preference is `system` (the default: follow the phone), `light` or `dark`
+  ([src/store/preferencesSlice.ts](../../src/store/preferencesSlice.ts)). The **Dark mode** button shows the theme in use
+  and saves the opposite as the merchant's choice. There is no way back to "follow the phone" short of clearing site
+  data; a three-way menu would cost more space than the choice is worth for this audience. Revisit if merchants ask.
+- **Where the button is.** In the top bar from 640px. Below that it is a row in the phone menu: at 360px a fourth icon in
+  the top bar wrapped the page title onto two lines — found by the 360px screenshot, not by a test.
+- **No light flash.** A small inline script in `index.html` applies the saved theme (or the phone's) before the first
+  paint; the store then keeps `<html class="dark">` in step and follows the phone's setting live while on `system`. A
+  Playwright test reloads with every script file blocked and service workers off — review pointed out that the mock's
+  service worker could otherwise serve the app past the block — and checks that `#root` still holds the loading
+  placeholder, proving the app did not run, before looking for the class. With the inline script deleted the test
+  fails; with the block removed, the placeholder check fails.
+- **Saved** under `novabiz.theme` in localStorage by a store subscriber (ADR-0004); `system` removes the key. The stored
+  value is untrusted: anything other than `light` or `dark` means `system`.
+- **Contrast:** the new banner and notes use existing pairs (`pending` on `pending-subtle`, `credit` on `credit-subtle`),
+  which the token test already checks in both themes.
+
 ## How we would know we were wrong
 
 - A contrast check fails in one theme after a token change — caught by the token test.

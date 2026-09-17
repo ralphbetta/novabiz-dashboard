@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { API, IDEMPOTENCY_HEADER, SendMoneyRequestSchema, type SendMoneyRequestWire } from './contracts'
 import { novabizApi as api } from './novabizApi'
 import { makeStore } from '../store'
+import { connectivity } from '../store/connectivitySlice'
 import { REQUEST_NOT_SENT, isDefiniteFailure } from '../lib/errors'
 import { TIMEOUT_HOLD_MS, createChaosController, type ChaosSettings } from '../mocks/chaos'
 import { createMockDb } from '../mocks/db'
@@ -76,6 +77,14 @@ describe('getBalance', () => {
     const result = await store.dispatch(api.endpoints.getBalance.initiate())
     expect(result.error).toMatchObject({ status: 500 })
     expect(count('GET', API.balance)).toBe(4)
+  })
+
+  it('does not retry while the browser reports no connection: reconnecting refetches it instead (ADR-0014)', async () => {
+    const { api, store } = setup({ chaos: { errorRate: 1 }, random: () => 0 })
+    store.dispatch(connectivity.connectionChanged({ online: false }))
+    const result = await store.dispatch(api.endpoints.getBalance.initiate())
+    expect(result.error).toMatchObject({ status: 500 })
+    expect(count('GET', API.balance)).toBe(1)
   })
 
   it('retries a read that times out, and reports TIMEOUT_ERROR when it keeps timing out', async () => {

@@ -616,21 +616,43 @@ for `timeout-after-commit`.
 
 ---
 
-### Phase 7 — Resilience, dark mode, offline (≈2h)
+### Phase 7 — Resilience, dark mode, offline (≈2h) — ◐ built and tested; not yet reviewed
 
 Backoff with jitter for reads (done in Phase 3). Online/offline banner; Send disabled while offline with an
 explanation. Cached-data age label. (Reconcile-before-refetch on reconnect: done in Phase 6.) Dark mode toggle
 persisted via the preferences slice subscriber. Contrast test over the token values.
 
+**Built:** a connection slice fed by the browser's online/offline events (not RTK Query's flag, which the reconnect guard
+holds back); a banner in the sticky top bar; *Send*, *Try again* and *Check status* refused while offline, in the thunks
+and on the buttons (`aria-disabled`, reason shown); read retries stopped while offline, refetched on reconnect; "Offline ·
+as of" on the balance and transaction lists; a preferences slice with the theme saved to localStorage, a pre-paint
+script in `index.html`, and a **Dark mode** button (top bar from 640px, phone menu below). Details in ADR-0014 and
+ADR-0010. The contrast test already covered both themes.
+
+**Tests:** 21 new unit and component tests (705 in all, including one added in review) and 2 Playwright tests (22 runs; 20 pass, 2 skipped). Each
+offline guard — send thunk, retry thunk, base query retries, Send button, Check status — and the pre-paint script was
+removed on purpose and a test was seen to fail.
+
+**Found while building:** at 360px the new top-bar icon wrapped the page title onto two lines, and the offline reason on
+the review step sat behind the sticky Send bar; both seen in screenshots and fixed. One new unit test only dispatched two
+actions and checked the slice, proving nothing about the reconnect guard it was named after; removed. axe never
+finishes under Vitest's fake timers, so accessibility checks run in tests with real timers.
+
+**Fixed after review:** the dark mode E2E test could have passed with the inline script broken, since the mock's service
+worker may serve scripts past Playwright's route block — service workers are now blocked in that test and it checks the
+app did not run. A read that failed offline with nothing cached stayed failed while a transfer's outcome was open (the
+reconnect is held); the reconnect guard now refetches those at once. The date, removed from the top bar at your request,
+now shows in the dashboard greeting at every width instead of only on phones.
+
 ---
 
-### Phase 8 — Tests (≈4h) — ◐ built and tested; not yet reviewed
+### Phase 8 — Tests (≈4h) — ✅ done
 
-**Built:** Playwright suite (`npm run e2e`) against a fresh production build: 9 tests at 360px and 1440px, 18 runs — 16
+**Built:** Playwright suite (`npm run e2e`) against a fresh production build: 9 tests at 360px and 1440px when this phase ended (Phase 7 later added 2), 18 runs — 16
 pass, 2 skipped by design (flow 4 runs at desktop size only; the drawer test at phone size only). The six ADR-0011 flows,
 two reload flows and the phone menu. Money asserted against the mock's ledger by idempotency key, against the server's
 balance moving exactly once, and — where the app changes it optimistically — against the balance shown on screen.
-Component tests were already written phase by phase (684 now). Details, and a recorded table of which regressions each
+Component tests were already written phase by phase (684 when this phase ended). Details, and a recorded table of which regressions each
 test catches (and one it does not), in ADR-0011 — *Implementation notes (Phase 8)*.
 
 **Fixed after review of the first suite:** flow 3 never checked the shown balance, and flow 1 never checked the pending

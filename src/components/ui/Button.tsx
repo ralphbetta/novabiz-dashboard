@@ -30,7 +30,7 @@ export function Button({ variant = 'secondary', className = '', type = 'button',
   return (
     <button
       type={type}
-      className={`${BASE} disabled:cursor-not-allowed disabled:opacity-60 ${VARIANTS[variant]} ${className}`}
+      className={`${BASE} disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-60 ${VARIANTS[variant]} ${className}`}
       {...props}
     />
   )

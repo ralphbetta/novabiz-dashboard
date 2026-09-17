@@ -11,7 +11,8 @@ export function OverviewPage() {
   return (
     <>
       <PageHeader title={`${greeting(now)}, ${MERCHANT.shortName}`}>
-        <span className="md:hidden">{formatLongDate(now)} · </span>
+        {/* At every width: the top bar no longer shows the date, so this is the only place it appears. */}
+        {formatLongDate(now)} · 
         Here&rsquo;s how your business is doing today.
       </PageHeader>
       <div className="flex flex-col gap-6">

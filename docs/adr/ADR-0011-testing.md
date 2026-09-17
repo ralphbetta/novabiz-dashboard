@@ -108,7 +108,8 @@ maintenance and catches nothing.
 - **Where:** `e2e/send-money.spec.ts` and `e2e/support.ts`; `playwright.config.ts` runs a fresh production build through
   `vite preview` (never a server left running, which would test old code), with a `desktop` (1440×900) and a `mobile`
   (360×800, touch) project, and no retries. Each test has a fresh browser context, so a mock starting from the seed.
-  9 tests × 2 sizes = 18 runs: 16 pass, 2 skipped by design (flow 4 on mobile, the drawer test on desktop).
+  11 tests × 2 sizes = 22 runs: 20 pass, 2 skipped by design (flow 4 on mobile, the drawer test on desktop). The two
+  Phase 7 tests (offline, dark mode) were added after this phase.
 - **Two kinds of money assertion.** The mock's ledger (fetched in the page, by idempotency key, in kobo) proves what the
   server recorded; the server's available balance moving by exactly one amount proves no second transfer under *any* key.
   Where the app changes money optimistically, the test also reads the **balance shown on screen**
@@ -140,9 +141,13 @@ Each change was made to the app, the named test run against a fresh build, and t
 | — same change | reload flow 7 | **Passed.** The reload cancels the second send before the slowed mock handles it. Flow 5 is the guard for this. |
 | Do not restore the mock's saved data | 6 and 7 | Both failed |
 | A new key on *Try again* (run in Phase 8's first pass) | 4 | Failed: the two POSTs carried different keys |
+| Phase 7: no offline check in the send thunk or on the Send button | offline | Failed: the tap went through and left the review step |
+| Phase 7: no pre-paint theme script in `index.html` | dark mode | Failed: no `dark` class after a reload with the app's scripts blocked (run again after review added `serviceWorkers: 'block'` and the `#root` check) |
+| Phase 7: the test's own script block removed | dark mode | Failed: `#root` held the rendered app, not the loading placeholder |
 
 - **Browser:** Playwright's Chromium, or `PLAYWRIGHT_CHANNEL=chrome` for an installed Chrome. Playwright's download stalled
-  on this network, so these runs used the installed Chrome.
+  on this network, so the Phase 8 runs used the installed Chrome. It has since finished; the Phase 7 review runs used
+  Playwright's own Chromium.
 
 ## Consequences
 

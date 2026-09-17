@@ -74,10 +74,39 @@ Built in Phase 3:
   the merchant scrolled through, one after another;
 - the reconciliation lookup always goes to the server (`forceRefetch`), never a cached "pending".
 
-**Not yet built:** suppressing retries while `navigator.onLine` is false and the offline banner (Phase 7).
-**Reconcile-before-refetch on reconnect must land with Phase 6, not Phase 7** — see the implementation plan.
-The lookup is a read, so it currently retries like one; Phase 6 may give its polling loop sole control of
-pacing.
+Built in Phase 6: reconcile-before-refetch on reconnect (the reconnect guard, ADR-0006).
+
+Built in Phase 7:
+- **The connection state** is its own slice ([src/store/connectivitySlice.ts](../../src/store/connectivitySlice.ts)),
+  fed by the browser's `online`/`offline` events. Not RTK Query's `config.online`: the reconnect guard holds RTK's
+  `onOnline` back while a transfer's outcome is open, so that flag can still say "offline" after the connection returns.
+- **No read retries while offline.** The base query stops retrying when the browser reports no connection, before and
+  after each backoff wait, and returns the error; `refetchOnReconnect` fetches it again when the connection returns.
+  This differs from the text above, which said retries *resume* on the `online` event: the read is fetched again
+  rather than the old retry loop waiting, so no request sits in a loop for a network that may not return.
+  **Exception, found in review:** while a transfer's outcome is open the reconnect guard holds RTK's `onOnline`, so
+  `refetchOnReconnect` does not fire. A read that failed offline would then stay failed until reconciliation ended, up
+  to about two minutes. The guard now refetches, at once, any read that failed with **nothing cached** (a page opened
+  while offline): it holds no optimistic change to lose. A failed read that **kept its data** — the balance card after
+  a refresh failed offline — still waits, and reads "Couldn't refresh · as of 14:32" meanwhile, because refetching it
+  is what would drop the kept change. Tested in `src/store/reconnect.test.ts`; removing the refetch, or the
+  nothing-cached condition, makes that test fail.
+- **The banner** sits in the sticky top bar on every page: "You're offline…" for as long as it lasts, then "You're back
+  online" for four seconds. Its live region is mounted from the first render.
+- ***Send* is refused offline** in two places: the thunk refuses (so no render timing matters), and the button carries
+  `aria-disabled` with the reason beside it. `aria-disabled`, not `disabled`, so a keyboard or screen reader user can
+  reach the button and hear why. On a phone the reason sits inside the sticky action bar, where it is seen; placed
+  above it, the bar covered it. *Try again* (a write) is refused the same way, and so is *Check status*, which would do
+  nothing visible while checking is paused.
+- **Age of loaded data:** the balance card reads "Offline · as of 14:32" (the server's `asOf`), and the recent and full
+  transaction lists show the same note from the time the page was fetched.
+- **Demo caveat:** the mock runs in a service worker, which answers even while the browser is offline. In the demo,
+  requests keep working offline; the banner and the refusals follow the browser's status, which is what a real device
+  on a dropped network would also report.
+
+**Not built:** an offline write queue (see Alternatives), and a check that the *server* is reachable when the browser
+says it is online — `navigator.onLine` true only means some network exists, so failures are still handled where they
+happen.
 
 ## Alternatives considered
 

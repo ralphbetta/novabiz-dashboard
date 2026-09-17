@@ -6,6 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b2447" />
     <title>NovaBiz Merchant Dashboard</title>
+    <script>
+      // The theme, before the first paint, so a dark page never flashes light. The same rule as resolveTheme in
+      // src/store/preferencesSlice.ts, which takes over once the app starts. Blocked storage means following the phone.
+      (function () {
+        var saved = null
+        try { saved = localStorage.getItem('novabiz.theme') } catch (e) {}
+        var systemDark = typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches
+        if (saved === 'dark' || (saved !== 'light' && systemDark)) document.documentElement.classList.add('dark')
+      })()
+    </script>
   </head>
   <body>
     <!-- Filled only if the data service cannot start. Present and empty from first paint, so a screen

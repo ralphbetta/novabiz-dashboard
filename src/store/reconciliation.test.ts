@@ -12,6 +12,7 @@ import { API, SendMoneyRequestSchema, type SendMoneyRequest } from '../api/contr
 import { novabizApi as api, type TransactionsPageArgs } from '../api/novabizApi'
 import { makeStore, type AppStore, type StoreOptions } from '.'
 import { retryTransfer, sendTransfer } from './sendTransfer'
+import { connectivity } from './connectivitySlice'
 import { transferDraft } from './transferDraftSlice'
 import { OPEN_TRANSFER_STORAGE_KEY, keyToKeep, persistOpenTransferKey, readOpenTransferKey } from './openTransferKey'
 import { TIMEOUT_HOLD_MS, createChaosController, type ForcedTransferOutcome } from '../mocks/chaos'
@@ -238,6 +239,22 @@ describe('reconciliation — "Try again" with the same key', () => {
     expect(attempt(store)?.status).toBe('pending')
     expect(serverTransfers(db)).toHaveLength(1)
     expect(posts()).toBe(2)
+  })
+
+  it('sends nothing while the browser reports no connection, and sends once it is back (ADR-0014)', async () => {
+    const { store, db } = await setup({ force: 'timeout-before-commit' })
+    await store.dispatch(sendTransfer({ request: request(500_000), idempotencyKey: KEY }))
+    await expect.poll(() => attempt(store)?.needsAttention, { timeout: 3_000 }).toBe(true)
+    const postsBefore = posts()
+
+    store.dispatch(connectivity.connectionChanged({ online: false }))
+    expect(await store.dispatch(retryTransfer())).toBe(false)
+    expect(posts()).toBe(postsBefore)
+    expect(attempt(store)).toMatchObject({ status: 'unknown', needsAttention: true })
+
+    store.dispatch(connectivity.connectionChanged({ online: true }))
+    expect(await store.dispatch(retryTransfer())).toBe(true)
+    expect(serverTransfers(db)).toHaveLength(1)
   })
 
   it('does nothing for an attempt restored after a reload, which has no request to send', async () => {

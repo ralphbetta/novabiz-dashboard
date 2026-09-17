@@ -244,3 +244,58 @@ test.describe('Responsive smoke', () => {
     await expect(drawer).toBeHidden()
   })
 })
+
+test.describe('Offline (Phase 7)', () => {
+  test('offline: a banner says so, Send is refused with a reason, and the transfer goes once the connection is back', async ({ page, context }) => {
+    await openApp(page, '/dashboard/send-money')
+    const before = await serverAvailableKobo(page)
+    await fillTransfer(page, AMOUNT)
+    const posts = recordTransferPosts(page)
+
+    await context.setOffline(true)
+    const banner = page.getByRole('banner').getByRole('status')
+    await expect(banner).toContainText('You’re offline.')
+    const send = page.getByRole('button', { name: 'Send ₦1,000.50' })
+    await expect(send).toHaveAttribute('aria-disabled', 'true')
+    await expect(page.getByText('Your details are kept. You can send when you’re back online.')).toBeInViewport()
+    // Playwright treats aria-disabled as disabled and would wait; a merchant can still tap it, so force the tap.
+    await send.click({ force: true })
+    await expect(page.getByRole('heading', { name: 'Review and send' })).toBeVisible()
+    expect(posts).toEqual([]) // nothing sent, nothing queued
+
+    await context.setOffline(false)
+    await expect(banner).toContainText('You’re back online.')
+    await expect(send).not.toHaveAttribute('aria-disabled')
+    await send.click()
+    await expect(page.getByRole('heading', { name: /Transfer (on its way|successful)/ })).toBeVisible({ timeout: CLIENT_TIMEOUT })
+    expect(posts).toHaveLength(1)
+    expect(await serverAvailableKobo(page)).toBe(before - AMOUNT_KOBO)
+  })
+})
+
+test.describe('Dark mode (Phase 7)', () => {
+  // No service worker, so nothing — including the mock's worker — can serve the app's scripts past the route block below.
+  // Without the mock the app still renders its shell, which is all this test needs.
+  test.use({ serviceWorkers: 'block' })
+
+  test('dark mode: the choice is applied at once and still there after a reload, with no light flash', async ({ page }, testInfo) => {
+    await page.goto('/dashboard')
+    const html = page.locator('html')
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    await expect(html).not.toHaveClass(/dark/) // the browser is set to light
+    if (testInfo.project.name === 'mobile') {
+      await page.getByRole('button', { name: 'Open menu' }).tap()
+      await page.getByRole('dialog').getByRole('button', { name: 'Dark mode' }).tap()
+    } else {
+      await page.getByRole('banner').getByRole('button', { name: 'Dark mode' }).click()
+    }
+    await expect(html).toHaveClass(/dark/)
+
+    // Reload with every script file blocked: only index.html's inline script can set the class.
+    await page.route('**/*.js', (route) => route.abort())
+    await page.reload()
+    // Proof the app did not run: React replaces this placeholder as soon as it renders.
+    await expect(page.locator('#root')).toHaveText('Loading NovaBiz…')
+    await expect(html).toHaveClass(/dark/)
+  })
+})

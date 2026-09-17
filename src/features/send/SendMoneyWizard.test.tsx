@@ -10,6 +10,7 @@ import { IDEMPOTENCY_HEADER, SendMoneyRequestSchema } from '../../api/contracts'
 import { novabizApi } from '../../api/novabizApi'
 import { makeStore, type AppStore } from '../../store'
 import { transferDraft } from '../../store/transferDraftSlice'
+import { connectivity } from '../../store/connectivitySlice'
 import { TIMEOUT_HOLD_MS, createChaosController } from '../../mocks/chaos'
 import { DEFAULT_SETTLEMENT_DELAY_MS, createMockDb } from '../../mocks/db'
 import { createHandlers } from '../../mocks/handlers'
@@ -591,6 +592,54 @@ describe('Send Money — reconciliation on the receipt', () => {
     await screen.findByRole('heading', { name: 'We still can’t confirm this transfer' }, { timeout: 5000 })
     expect(screen.getByRole('button', { name: 'Check status' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Send Money — offline (ADR-0014)', () => {
+  it('keeps Send reachable but refuses it while offline, says why, and sends once the connection is back', async () => {
+    const { user, store, container } = renderWizard()
+    await fillRecipient(user)
+    await fillAmount(user, '5,000')
+    await screen.findByRole('heading', { name: 'Review and send' })
+
+    act(() => { store.dispatch(connectivity.connectionChanged({ online: false })) })
+    const send = screen.getByRole('button', { name: 'Send ₦5,000.00' })
+    expect(send).toHaveAttribute('aria-disabled', 'true')
+    expect(send).toHaveAccessibleDescription(/You’re offline. Your details are kept/)
+    expect(await axeViolations(container)).toEqual([])
+
+    await user.click(send)
+    await waitFor(() => expect(assertive()).toHaveTextContent('You’re offline. Your transfer will be ready to send when you’re back online.'))
+    expect(postKeys).toEqual([])
+    expect(screen.getByRole('heading', { name: 'Review and send' })).toBeInTheDocument()
+
+    act(() => { store.dispatch(connectivity.connectionChanged({ online: true })) })
+    expect(send).not.toHaveAttribute('aria-disabled')
+    await user.click(send)
+    expect(await screen.findByRole('heading', { name: 'Transfer on its way' }, { timeout: 5000 })).toBeInTheDocument()
+    expect(postKeys).toHaveLength(1)
+  })
+
+  it('on a transfer that needs attention, Try again and Check status do nothing while offline, and say why', async () => {
+    const { user, store } = renderWizard({ tracking: { giveUpAfterMs: 150 } })
+    // Stand in for an unconfirmed transfer that reconciliation gave up on: what matters here is the receipt's buttons.
+    act(() => {
+      store.dispatch(transferDraft.attemptStarted({ idempotencyKey: KEY, request: SendMoneyRequestSchema.parse({ recipient: { accountNumber: '0123456789', bankCode: '058', accountName: 'Ngozi Okafor' }, amountKobo: 500_000 }) }))
+      store.dispatch(connectivity.connectionChanged({ online: false }))
+      store.dispatch(transferDraft.attemptUnknown({ idempotencyKey: KEY }))
+      store.dispatch(transferDraft.attemptNeedsAttention({ idempotencyKey: KEY }))
+    })
+    await screen.findByRole('heading', { name: 'We still can’t confirm this transfer' })
+    const postsBefore = postKeys.length
+
+    for (const name of ['Try again', 'Check status']) {
+      const button = screen.getByRole('button', { name })
+      expect(button).toHaveAttribute('aria-disabled', 'true')
+      expect(button).toHaveAccessibleDescription(/You’re offline. You can check or try again when you’re back online./)
+      await user.click(button)
+    }
+    expect(postKeys).toHaveLength(postsBefore)
+    expect(store.getState().transferDraft.attempt).toMatchObject({ status: 'unknown', needsAttention: true })
   })
 })
 

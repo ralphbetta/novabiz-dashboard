@@ -1,10 +1,13 @@
 /**
- * The Redux store (ADR-0003, ADR-0004). One store: RTK Query's cache and the client-only Send Money draft.
+ * The Redux store (ADR-0003, ADR-0004). One store: RTK Query's cache, the client-only Send Money draft, the connection
+ * state and the merchant's theme preference.
  */
 import { configureStore } from '@reduxjs/toolkit'
 import { DEFAULT_HTTP_CONFIG, DEFAULT_SERVICE_WAIT_MS, type ApiExtra, type HttpConfig } from '../api/baseQuery'
 import { novabizApi } from '../api/novabizApi'
 import { transferDraftSlice } from './transferDraftSlice'
+import { connectivitySlice } from './connectivitySlice'
+import { preferencesSlice } from './preferencesSlice'
 import { DEFAULT_TRACKING_CONFIG, createTransferTracker, type TrackingConfig } from './transferTracker'
 import { reconnectGuard } from './reconnectGuard'
 
@@ -28,6 +31,8 @@ export function makeStore({ serviceReady = Promise.resolve(), serviceWaitMs = DE
     reducer: {
       [novabizApi.reducerPath]: novabizApi.reducer,
       [transferDraftSlice.reducerPath]: transferDraftSlice.reducer,
+      [connectivitySlice.reducerPath]: connectivitySlice.reducer,
+      [preferencesSlice.reducerPath]: preferencesSlice.reducer,
     },
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({ thunk: { extraArgument: extra } })

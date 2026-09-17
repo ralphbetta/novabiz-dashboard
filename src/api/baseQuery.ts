@@ -5,7 +5,8 @@
  *      here rather than the page staying blank (ADR-0005). If the wait runs out, the request is refused
  *      WITHOUT being sent — and a later request can still succeed if the service comes up late.
  *   2. Sends it with a per-attempt timeout.
- *   3. Retries reads — never writes — with full-jitter backoff, within an overall deadline.
+ *   3. Retries reads — never writes — with full-jitter backoff, within an overall deadline, and not while the browser
+ *      reports no connection: the read is refetched when the connection returns instead (refetchOnReconnect).
  *
  * All timing and the base URL come from the store (ApiExtra), not from the API instance. So there is one
  * API, the one the hooks are bound to, and tests configure it through the store they build.
@@ -106,6 +107,9 @@ const abortableSleep = (ms: number, signal: AbortSignal) =>
 
 const send = fetchBaseQuery()
 
+/** The store's connection state (src/store/connectivitySlice.ts), read by shape so the API does not import the store. */
+const offline = (state: unknown) => (state as { connectivity?: { online: boolean } }).connectivity?.online === false
+
 export const novabizBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError, NovabizExtraOptions> = async (
   args,
   api,
@@ -131,6 +135,10 @@ export const novabizBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBas
     const timeout = Math.max(1, Math.min(http.timeoutMs, deadline - Date.now()))
     const result = await send({ ...request, url: `${http.baseUrl}${request.url}`, timeout }, api, {})
     if (!result.error || !shouldRetry(result.error, attempt, maxRetries)) return result
+    // No connection: another attempt would fail the same way and use up the retries. Reconnecting refetches it — except
+    // that while a transfer's outcome is open the reconnect is held, and only a failed read with nothing cached is
+    // refetched at once; one that kept its data waits for reconciliation (src/store/reconnectGuard.ts).
+    if (offline(api.getState())) return result
 
     const delay = backoffDelayMs(attempt, http)
     if (Date.now() + delay >= deadline) return result // no time left for another attempt
@@ -139,5 +147,6 @@ export const novabizBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBas
     } catch {
       return result // the request was abandoned, e.g. its component unmounted
     }
+    if (offline(api.getState())) return result // the connection went while waiting
   }
 }

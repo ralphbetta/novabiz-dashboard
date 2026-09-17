@@ -344,6 +344,10 @@ transaction row could show the same amount differently.
   the shown balance and check the server's balance moved exactly once; the results are recorded per change in
   ADR-0011, including one the reload test still does not catch. The docs also miscounted the runs and called the phase
   done before review.
+- **Phase 7: layout problems only a screenshot showed, and a test named for something it did not test.** The model
+  added the dark mode icon to the top bar and the offline reason above the Send bar; every test passed. The 360px
+  screenshot showed the page title wrapped onto two lines and the reason hidden behind the sticky bar. It also wrote a
+  unit test called "not held back by the reconnect guard" that never involved the guard; it was removed.
 - **A stale code sample.** The implementation plan's Phase 1 section still held the buggy fallback
   from §3.1 after the source was fixed. The sample was removed and replaced with links to the real
   files.

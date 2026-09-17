@@ -8,8 +8,8 @@
  * Tailwind's default palette is removed, so components can only use these semantic tokens: every colour a
  * component can reach is in this file, and tokens.test.ts checks each text/background pair against WCAG AA.
  *
- * Hex only, so the contrast test can read them. Dark mode is class-based: `.dark` on <html> (Phase 7 adds the
- * toggle and persisted preference).
+ * Hex only, so the contrast test can read them. Dark mode is class-based: `.dark` on <html>, set before first paint by
+ * index.html and kept in step by src/store/preferencesSlice.ts.
  */
 
 @custom-variant dark (&:where(.dark, .dark *));

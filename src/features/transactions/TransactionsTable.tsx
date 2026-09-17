@@ -12,6 +12,7 @@ import { Pagination } from './Pagination'
 import type { PageSize } from './pageSize'
 import { pageRange } from './pageRange'
 import { TransactionRow } from './TransactionRow'
+import { OfflineNote } from '../connection/OfflineNote'
 
 const ROW_HEIGHT_NARROW = 72
 const ROW_HEIGHT_WIDE = 64
@@ -54,7 +55,7 @@ export function TransactionsTable({
   const pageIndex = cursors.length - 1
   const cursor = cursors[pageIndex] ?? null
 
-  const { currentData, data, error, isFetching, refetch } = useGetTransactionsPageQuery({ filters, limit: pageSize, cursor })
+  const { currentData, data, error, isFetching, refetch, fulfilledTimeStamp } = useGetTransactionsPageQuery({ filters, limit: pageSize, cursor })
   const announce = useAnnounce()
   const isWide = useMediaQuery('(min-width: 640px)')
   const rowHeight = isWide ? ROW_HEIGHT_WIDE : ROW_HEIGHT_NARROW
@@ -162,6 +163,7 @@ export function TransactionsTable({
 
   return (
     <div>
+      <OfflineNote loadedAt={currentData ? fulfilledTimeStamp : undefined} className="border-t border-border px-4 py-2 font-medium text-pending sm:px-5" />
       <div
         ref={tableTop}
         tabIndex={-1}

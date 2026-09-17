@@ -9,10 +9,12 @@
 import { afterAll, afterEach, beforeAll, describe, it, expect } from 'vitest'
 import { clearAllListeners } from '@reduxjs/toolkit'
 import { setupServer } from 'msw/node'
+import { http, HttpResponse } from 'msw'
 import { SendMoneyRequestSchema } from '../api/contracts'
 import { novabizApi as api } from '../api/novabizApi'
 import { makeStore } from '.'
 import { transferDraft } from './transferDraftSlice'
+import { connectivity } from './connectivitySlice'
 import { sendTransfer } from './sendTransfer'
 import { TIMEOUT_HOLD_MS, createChaosController } from '../mocks/chaos'
 import { createMockDb } from '../mocks/db'
@@ -27,9 +29,13 @@ const request = SendMoneyRequestSchema.parse({
 
 const server = setupServer()
 const balanceRequests: string[] = []
+const pageRequests: string[] = []
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' })
-  server.events.on('request:start', ({ request: r }) => { if (new URL(r.url).pathname === '/api/balance') balanceRequests.push(r.method) })
+  server.events.on('request:start', ({ request: r }) => { const path = new URL(r.url).pathname
+    if (path === '/api/balance') balanceRequests.push(r.method)
+    if (path === '/api/transactions' && !new URL(r.url).searchParams.has('idempotencyKey')) pageRequests.push(r.method)
+  })
 })
 /** Stores made by a test: their transfer trackers outlive the test unless stopped. */
 const stores: ReturnType<typeof makeStore>[] = []
@@ -37,6 +43,7 @@ afterEach(() => {
   for (const store of stores.splice(0)) store.dispatch(clearAllListeners())
   server.resetHandlers()
   balanceRequests.length = 0
+  pageRequests.length = 0
 })
 afterAll(() => server.close())
 
@@ -83,6 +90,39 @@ describe('reconnect while a transfer outcome is open', () => {
     store.dispatch(api.internalActions.onOffline())
     store.dispatch(api.internalActions.onOnline())
     await expect.poll(() => balanceRequests).toEqual(['GET'])
+  })
+
+  it('still refetches a read that failed offline with nothing cached, while the outcome is open (review finding)', async () => {
+    const store = await storeWithUnknownTransfer()
+    await store.dispatch(sendTransfer({ request, idempotencyKey: KEY }))
+    expect(store.getState().transferDraft.attempt?.status).toBe('unknown')
+
+    // Offline, the merchant opens the transactions page: it fails, with nothing cached to show.
+    store.dispatch(api.internalActions.onOffline())
+    store.dispatch(connectivity.connectionChanged({ online: false }))
+    const failing = http.get(`${BASE}/api/transactions`, ({ request: r }) =>
+      new URL(r.url).searchParams.has('idempotencyKey') ? undefined : HttpResponse.error(), { once: true })
+    server.use(failing)
+    const args = { filters: {}, limit: 25, cursor: null }
+    store.dispatch(api.endpoints.getTransactionsPage.initiate(args))
+    await expect.poll(() => api.endpoints.getTransactionsPage.select(args)(store.getState()).isError).toBe(true)
+    expect(api.endpoints.getTransactionsPage.select(args)(store.getState()).data).toBeUndefined()
+    // And a balance refresh fails too, but the balance keeps its data — the kept change.
+    const kept = api.endpoints.getBalance.select()(store.getState()).data?.availableBalanceKobo
+    server.use(http.get(`${BASE}/api/balance`, () => HttpResponse.error(), { once: true }))
+    await store.dispatch(api.endpoints.getBalance.initiate(undefined, { subscribe: false, forceRefetch: true }))
+    expect(api.endpoints.getBalance.select()(store.getState())).toMatchObject({ isError: true, data: { availableBalanceKobo: kept } })
+
+    // Back online (the failing handler was used once). The outcome is still unknown, so the reconnect is held — but this read has nothing to protect.
+    pageRequests.length = 0
+    balanceRequests.length = 0
+    store.dispatch(connectivity.connectionChanged({ online: true }))
+    store.dispatch(api.internalActions.onOnline())
+    await expect.poll(() => api.endpoints.getTransactionsPage.select(args)(store.getState()).data).toBeDefined()
+    expect(store.getState().transferDraft.attempt?.status).toBe('unknown')
+    await settle()
+    expect(balanceRequests).toEqual([]) // the balance holds the kept change, so it still waits
+    expect(api.endpoints.getBalance.select()(store.getState()).data?.availableBalanceKobo).toBe(kept)
   })
 
   it('drops a held reconnect if the connection goes again, and refetches only on the next real reconnect', async () => {

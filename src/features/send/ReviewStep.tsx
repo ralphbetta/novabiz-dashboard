@@ -11,6 +11,7 @@ import { sanitizeText } from '../../lib/sanitize'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { sendTransfer } from '../../store/sendTransfer'
 import { transferDraft } from '../../store/transferDraftSlice'
+import { selectOnline } from '../../store/connectivitySlice'
 import { buildRequest } from './schemas'
 import { StepActions, StepFrame, StepHeading } from './StepLayout'
 
@@ -27,6 +28,7 @@ export function ReviewStep() {
   const amountInput = useAppSelector((s) => s.transferDraft.amountInput)
   const narration = useAppSelector((s) => s.transferDraft.narration)
   const { data: balance } = useGetBalanceQuery()
+  const online = useAppSelector(selectOnline)
 
   const built = buildRequest({ recipient, amountInput, narration }, balance?.availableBalanceKobo)
   const bank = bankByCode(recipient.bankCode)
@@ -35,6 +37,11 @@ export function ReviewStep() {
   // A second tap sends nothing: `sendTransfer` refuses while an attempt's outcome is open. It creates the attempt's
   // idempotency key, once (ADR-0007).
   const send = () => {
+    // Offline: nothing is queued to go out later on its own (ADR-0014). The details stay for when the connection is back.
+    if (!online) {
+      announce('You’re offline. Your transfer will be ready to send when you’re back online.', 'assertive')
+      return
+    }
     if (!built.ok) {
       announce(`There is a problem: ${built.message}`, 'assertive')
       return
@@ -99,12 +106,26 @@ export function ReviewStep() {
         Check the name. A completed transfer cannot be reversed.
       </p>
 
-      <StepActions>
+      <StepActions
+        note={online ? null : (
+          <p id="send-offline" className="flex items-start gap-2 rounded-xl bg-pending-subtle px-3 py-2.5 text-sm text-pending">
+            <Icon name="wifi-off" className="mt-px size-4" />
+            <span><span className="font-semibold">You’re offline.</span> Your details are kept. You can send when you’re back online.</span>
+          </p>
+        )}
+      >
         <Button onClick={() => dispatch(transferDraft.stepChanged('amount'))} className="w-full sm:w-auto">
           <Icon name="chevron-left" className="size-4" />
           Back
         </Button>
-        <Button variant="primary" onClick={send} className="w-full sm:w-auto sm:min-w-48">
+        {/* aria-disabled, not disabled: it stays focusable, so a keyboard or screen reader user reaches it and hears why. */}
+        <Button
+          variant="primary"
+          onClick={send}
+          aria-disabled={!online || undefined}
+          aria-describedby={online ? undefined : 'send-offline'}
+          className="w-full sm:w-auto sm:min-w-48"
+        >
           <Icon name="send" className="size-4" />
           {built.ok ? `Send ${formatNaira(built.request.amountKobo)}` : 'Send money'}
         </Button>

@@ -9,12 +9,25 @@
  * checks the unknown transfer at once; when that settles the outcome — or reconciliation stops and the attempt needs
  * attention — the held reconnect is released and the refetch happens then. If the connection drops again first, the
  * held reconnect is dropped and the next one decides. RTK only records the online flag; nothing else waits on it.
+ *
+ * One exception is refetched at once: a read that failed with nothing cached, typically a page opened while offline.
+ * It holds no optimistic change to lose, and read retries stop while offline (ADR-0014), so without this it would stay
+ * failed until reconciliation ends — up to about two minutes. A failed read that still has data (the balance card after
+ * a refresh failed offline) keeps its data and waits: refetching it is exactly what would drop the kept change.
  */
 import type { Middleware } from '@reduxjs/toolkit'
 import { novabizApi } from '../api/novabizApi'
 import type { TransferDraftState } from './transferDraftSlice'
 
-type State = { transferDraft: TransferDraftState }
+type State = { transferDraft: TransferDraftState; [novabizApi.reducerPath]: ReturnType<typeof novabizApi.reducer> }
+type Endpoints = Record<string, { initiate: (args: unknown, options: { subscribe: boolean; forceRefetch: boolean }) => never }>
+
+/** Reads that failed with nothing cached. Reconciliation lookups are left to the transfer tracker, which paces them. */
+function failedEmptyReads(state: State) {
+  return Object.values(state[novabizApi.reducerPath].queries).filter(
+    (query) => query?.status === 'rejected' && query.data === undefined && query.endpointName !== 'getTransferByKey',
+  )
+}
 
 /** Sending, or unknown and still being reconciled. Once it needs attention, the server's figures are the best there are. */
 const outcomeOpen = (state: State) => {
@@ -27,6 +40,10 @@ export const reconnectGuard: Middleware<object, State> = (store) => {
   return (next) => (action) => {
     if (novabizApi.internalActions.onOnline.match(action) && outcomeOpen(store.getState())) {
       held = true
+      for (const query of failedEmptyReads(store.getState())) {
+        const endpoint = query?.endpointName ? (novabizApi.endpoints as unknown as Endpoints)[query.endpointName] : undefined
+        if (endpoint) store.dispatch(endpoint.initiate(query?.originalArgs, { subscribe: false, forceRefetch: true }))
+      }
       return action
     }
     // Offline again: the held reconnect is stale. The next real reconnect will be held or passed on its own.

@@ -8,6 +8,7 @@ import { formatNaira } from '../../lib/money'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { retryTransfer } from '../../store/sendTransfer'
 import { transferDraft, type TransferAttempt } from '../../store/transferDraftSlice'
+import { selectOnline } from '../../store/connectivitySlice'
 import { StepHeading } from './StepLayout'
 
 interface Outcome {
@@ -117,6 +118,7 @@ export function TransferResult() {
   const dispatch = useAppDispatch()
   const announce = useAnnounce()
   const attempt = useAppSelector((s) => s.transferDraft.attempt)
+  const online = useAppSelector(selectOnline)
 
   // Announce changes while this screen is open, not the outcome found on arriving here: the heading already says it.
   const announced = useRef<string | undefined>(outcomeKey(attempt))
@@ -168,6 +170,13 @@ export function TransferResult() {
         </dl>
       </div>
 
+      {unknown && attempt.needsAttention && !online ? (
+        <p id="result-offline" className="mt-6 flex items-start gap-2 rounded-2xl bg-pending-subtle p-4 text-sm text-pending">
+          <Icon name="wifi-off" className="mt-px size-4" />
+          <span><span className="font-semibold">You’re offline.</span> You can check or try again when you’re back online.</span>
+        </p>
+      ) : null}
+
       <div className="mt-6 flex flex-col-reverse flex-wrap gap-3 sm:flex-row sm:justify-center">
         {attempt.status === 'sending' ? null : <ButtonLink to="/dashboard/transactions">View transactions</ButtonLink>}
         {attempt.status === 'failed' && !attempt.failure?.afterAcceptance && request ? (
@@ -180,10 +189,14 @@ export function TransferResult() {
         ) : null}
         {unknown ? <Button onClick={() => dispatch(transferDraft.draftReset())}>Start a different transfer</Button> : null}
         {unknown && attempt.needsAttention && request ? (
-          <Button onClick={() => void dispatch(retryTransfer())}>Try again</Button>
+          <Button {...offlineProps(online)} onClick={() => { if (online) void dispatch(retryTransfer()) }}>Try again</Button>
         ) : null}
         {unknown && attempt.needsAttention ? (
-          <Button variant="primary" onClick={() => dispatch(transferDraft.reconciliationRestarted({ idempotencyKey: attempt.idempotencyKey }))}>
+          <Button
+            variant="primary"
+            {...offlineProps(online)}
+            onClick={() => { if (online) dispatch(transferDraft.reconciliationRestarted({ idempotencyKey: attempt.idempotencyKey })) }}
+          >
             <Icon name="refresh" className="size-4" />
             Check status
           </Button>
@@ -191,6 +204,11 @@ export function TransferResult() {
       </div>
     </div>
   )
+}
+
+/** Offline, an action that needs the server stays focusable but says it is unavailable, and why (ADR-0014). */
+function offlineProps(online: boolean) {
+  return online ? {} : { 'aria-disabled': true, 'aria-describedby': 'result-offline' }
 }
 
 function Detail({ label, children }: { label: string; children: ReactNode }) {
