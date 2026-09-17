@@ -111,12 +111,42 @@ export function createChaosController({ settings: initial = {}, random = Math.ra
   /** Transfer id -> settlement decided when it was created, so "the next transfer" means exactly that. */
   const settlementByTransferId = new Map<string, 'successful' | 'failed'>()
 
+  /**
+   * For watchers such as the Mock API panel: one snapshot object between changes (as `useSyncExternalStore` needs), and
+   * a notification whenever the settings or an armed outcome change — including when a request uses one up.
+   */
+  type Snapshot = { settings: ChaosSettings; forced: { transfer: ForcedTransferOutcome | null; settlement: ForcedSettlement | null } }
+  const listeners = new Set<() => void>()
+  const takeSnapshot = (): Snapshot => ({ settings: { ...settings }, forced: { transfer: forcedTransfer, settlement: forcedSettlement } })
+  let snapshot = takeSnapshot()
+  const changed = () => {
+    const next = takeSnapshot()
+    if (JSON.stringify(next) === JSON.stringify(snapshot)) return
+    snapshot = next
+    for (const listener of listeners) {
+      // A watcher is the panel, not the mock. One that throws must not fail the request being decided.
+      try {
+        listener()
+      } catch (error) {
+        console.error('[mock api] a chaos watcher threw', error)
+      }
+    }
+  }
+
   return {
     getSettings: (): ChaosSettings => ({ ...settings }),
+
+    getSnapshot: (): Snapshot => snapshot,
+
+    subscribe(listener: () => void): () => void {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
 
     /** Merge and validate. Throws on out-of-range values or unknown keys, rather than clamping or ignoring them. */
     update(partial: Partial<ChaosSettings>): ChaosSettings {
       settings = ChaosSettingsSchema.parse({ ...settings, ...partial })
+      changed()
       return { ...settings }
     },
 
@@ -130,6 +160,7 @@ export function createChaosController({ settings: initial = {}, random = Math.ra
       settings = { ...initialSettings }
       forcedTransfer = null
       forcedSettlement = null
+      changed()
     },
 
     /**
@@ -142,11 +173,13 @@ export function createChaosController({ settings: initial = {}, random = Math.ra
      */
     forceNextTransfer(outcome: ForcedTransferOutcome | null): void {
       forcedTransfer = outcome === null ? null : ForcedTransferOutcomeSchema.parse(outcome)
+      changed()
     },
 
     /** Force whether the next transfer created will settle successfully or fail. Pass null to cancel. */
     forceNextSettlement(outcome: ForcedSettlement | null): void {
       forcedSettlement = outcome === null ? null : ForcedSettlementSchema.parse(outcome)
+      changed()
     },
 
     getForced: () => ({ transfer: forcedTransfer, settlement: forcedSettlement }),
@@ -173,10 +206,12 @@ export function createChaosController({ settings: initial = {}, random = Math.ra
       const forced = isTransferWrite ? forcedTransfer : null
       if (forced === 'success') {
         forcedTransfer = null
+        changed()
         return { delayMs, failure: null, settlementRoll }
       }
       if (forced !== null && FORCED_FAILURES[forced].when === 'before-commit') {
         forcedTransfer = null
+        changed()
         return { delayMs, failure: FORCED_FAILURES[forced], settlementRoll }
       }
       // No forced outcome, or a forced after-commit outcome that stays armed: the random rates apply. An
@@ -201,11 +236,13 @@ export function createChaosController({ settings: initial = {}, random = Math.ra
       settlementByTransferId.set(transferId, outcome)
 
       const forced = forcedTransfer
-      if (forced === null || forced === 'success') return null
-      const failure = FORCED_FAILURES[forced]
-      if (failure.when !== 'after-commit') return null
+      if (forced === null || forced === 'success' || FORCED_FAILURES[forced].when !== 'after-commit') {
+        changed()
+        return null
+      }
       forcedTransfer = null
-      return failure
+      changed()
+      return FORCED_FAILURES[forced]
     },
 
     /** The db's settlement hook. */

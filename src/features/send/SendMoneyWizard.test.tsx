@@ -220,8 +220,10 @@ describe('Send Money — amount step', () => {
 
   it.each([
     ['', 'Enter an amount'],
-    ['abc', 'Enter an amount in naira, like 5,000 or 5,000.50'],
-    ['1,000.505', 'Enter an amount in naira, like 5,000 or 5,000.50'],
+    // Letters never reach the field (they are dropped while typing), so it is left empty.
+    ['abc', 'Enter an amount'],
+    ['5.', 'Enter an amount in naira, like 5,000 or 5,000.50'],
+    ['-', 'Enter an amount in naira, like 5,000 or 5,000.50'],
     ['99.99', 'The minimum transfer is ₦100.00'],
   ])('rejects %j: %s', async (amount, message) => {
     const { user } = renderWizard()
@@ -425,7 +427,8 @@ describe('Send Money — review findings', () => {
     await user.click(screen.getByRole('button', { name: 'Retry' }))
     await verified('Ngozi Okafor')
     expect(accountNumberField()).not.toHaveAttribute('aria-invalid')
-    expect(screen.queryByText(/The account could not be verified/)).not.toBeInTheDocument()
+    // Within the form: the announcer's live region still holds the message spoken earlier, which is correct.
+    expect(within(accountNumberField().closest('form') as HTMLElement).queryByText(/The account could not be verified/)).not.toBeInTheDocument()
   })
 
   it('clears the "wait for verification" error once the lookup finishes', async () => {
@@ -439,7 +442,7 @@ describe('Send Money — review findings', () => {
     release()
     await verified('Ngozi Okafor')
     expect(accountNumberField()).not.toHaveAttribute('aria-invalid')
-    expect(screen.queryByText(/Wait for the account name to be verified/)).not.toBeInTheDocument()
+    expect(within(accountNumberField().closest('form') as HTMLElement).queryByText(/Wait for the account name to be verified/)).not.toBeInTheDocument()
   })
 
   it('shows the description on review exactly as it will be sent: sanitised, with no direction overrides', async () => {
@@ -588,5 +591,137 @@ describe('Send Money — reconciliation on the receipt', () => {
     await screen.findByRole('heading', { name: 'We still can’t confirm this transfer' }, { timeout: 5000 })
     expect(screen.getByRole('button', { name: 'Check status' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Send Money — account number input', () => {
+  it('ignores anything that is not a digit, and the counter counts only digits', async () => {
+    const { user } = renderWizard()
+    const field = screen.getByLabelText('Account number')
+    await user.type(field, 'dddd')
+    expect(field).toHaveValue('')
+    expect(screen.getByText('0/10')).toBeInTheDocument()
+
+    await user.type(field, '01a2-3 4')
+    expect(field).toHaveValue('01234')
+    expect(screen.getByText('5/10')).toBeInTheDocument()
+  })
+
+  it('keeps every digit of a pasted number written with spaces', async () => {
+    const { user } = renderWizard()
+    const field = screen.getByLabelText('Account number')
+    await user.click(field)
+    await user.paste('0123 456 789')
+    expect(field).toHaveValue('0123456789')
+  })
+})
+
+describe('Send Money — amount input', () => {
+  it('ignores letters and groups thousands while typing', async () => {
+    const { user } = renderWizard()
+    await fillRecipient(user)
+    const field = screen.getByLabelText('Amount in naira')
+    await user.type(field, 'pppp')
+    expect(field).toHaveValue('')
+    await user.type(field, '899889')
+    expect(field).toHaveValue('899,889')
+    await user.type(field, '.5x0')
+    expect(field).toHaveValue('899,889.50')
+  })
+
+  it('puts a digit typed in the middle where the caret was', async () => {
+    const { user } = renderWizard()
+    await fillRecipient(user)
+    const field = screen.getByLabelText('Amount in naira') as HTMLInputElement
+    await user.type(field, '10000')
+    expect(field).toHaveValue('10,000')
+    // Caret after the "1", then type 5: 150,000.
+    field.setSelectionRange(1, 1)
+    await user.keyboard('5')
+    expect(field).toHaveValue('150,000')
+    expect(field.selectionStart).toBe(2)
+  })
+
+  it('Backspace or Delete next to a comma removes the digit beside it, not just the comma', async () => {
+    const { user } = renderWizard()
+    await fillRecipient(user)
+    const field = screen.getByLabelText('Amount in naira') as HTMLInputElement
+    await user.type(field, '899889')
+    expect(field).toHaveValue('899,889')
+
+    field.setSelectionRange(4, 4) // right after the comma
+    await user.keyboard('{Backspace}')
+    expect(field).toHaveValue('89,889')
+    expect(field.selectionStart).toBe(2)
+
+    field.setSelectionRange(2, 2) // right before the comma
+    await user.keyboard('{Delete}')
+    expect(field).toHaveValue('8,989')
+  })
+
+  it('refuses a typed comma instead of reading 5000,50 as 500,050, and says why', async () => {
+    const { user } = renderWizard()
+    await fillRecipient(user)
+    const field = screen.getByLabelText('Amount in naira')
+    await user.type(field, '5000,')
+    expect(field).toHaveValue('5,000')
+    expect(field).toHaveAccessibleDescription(/Use a point for kobo, like 5,000.50/)
+    await waitFor(() => expect(assertive()).toHaveTextContent('Use a point for kobo, like 5,000.50'))
+
+    await user.type(field, '.50')
+    expect(field).toHaveValue('5,000.50')
+    expect(field).not.toHaveAccessibleDescription(/Use a point for kobo/)
+  })
+
+  it('refuses a pasted amount it would have to guess at, keeping the field as it was', async () => {
+    const { user } = renderWizard()
+    await fillRecipient(user)
+    const field = screen.getByLabelText('Amount in naira')
+    await user.click(field)
+    await user.paste('1,000.505')
+    expect(field).toHaveValue('')
+    expect(field).toHaveAccessibleDescription(/Enter an amount in naira, like 5,000 or 5,000.50/)
+  })
+
+  it('refuses a second point typed mid-number, keeping the decimals', async () => {
+    const { user } = renderWizard()
+    await fillRecipient(user)
+    const field = screen.getByLabelText('Amount in naira') as HTMLInputElement
+    await user.type(field, '1000.50')
+    field.setSelectionRange(1, 1)
+    await user.keyboard('.')
+    expect(field).toHaveValue('1,000.50')
+    expect(field).toHaveAccessibleDescription(/The amount already has a point/)
+  })
+
+  it('keeps the zeros when the first digit is deleted, so the next digit restores the amount', async () => {
+    const { user } = renderWizard()
+    await fillRecipient(user)
+    const field = screen.getByLabelText('Amount in naira') as HTMLInputElement
+    await user.type(field, '1000000')
+    field.setSelectionRange(1, 1)
+    await user.keyboard('{Backspace}2')
+    expect(field).toHaveValue('2,000,000')
+  })
+})
+
+describe('Send Money — account number input, review findings', () => {
+  it('keeps the caret where it was when a letter is typed in the middle', async () => {
+    const { user } = renderWizard()
+    const field = screen.getByLabelText('Account number') as HTMLInputElement
+    await user.type(field, '012345')
+    field.setSelectionRange(2, 2)
+    await user.keyboard('x9')
+    expect(field).toHaveValue('0192345')
+    expect(field.selectionStart).toBe(3)
+  })
+
+  it('refuses a paste that would not fit, rather than silently dropping digits', async () => {
+    const { user } = renderWizard()
+    const field = screen.getByLabelText('Account number')
+    await user.type(field, '01234')
+    await user.paste('567890123')
+    expect(field).toHaveValue('01234')
+    expect(field).toHaveAccessibleDescription(/An account number has 10 digits/)
   })
 })

@@ -1,10 +1,27 @@
-import { useRef, type ReactNode } from 'react'
+import { lazy, Suspense, useRef, type ReactNode } from 'react'
 import { Icon } from '../components/ui/Icon'
 import { IconButton } from '../components/ui/Button'
 import { formatLongDate } from '../lib/format'
 import { MERCHANT } from './merchant'
 import { NavList } from './navigation'
 import { OpenTransferNotice } from './OpenTransferNotice'
+import { useMockControls } from '../features/mockControls/mockControlsContext'
+
+/**
+ * The Mock API panel is loaded only once the mock has started, so neither it nor the mock code it uses is in the main
+ * bundle — and a build without the mock never downloads it (ADR-0005).
+ */
+const MockApiControls = lazy(() => import('../features/mockControls/MockApiControls').then((module) => ({ default: module.MockApiControls })))
+
+function MockApiSlot() {
+  const controls = useMockControls()
+  if (!controls) return null
+  return (
+    <Suspense fallback={null}>
+      <MockApiControls />
+    </Suspense>
+  )
+}
 
 function Brand() {
   return (
@@ -106,6 +123,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
             </IconButton>
             <p className="text-base font-semibold text-fg">{title}</p>
             <div className="ml-auto flex items-center gap-4">
+              <MockApiSlot />
               <p className="hidden text-sm text-fg-muted md:block">{formatLongDate(new Date())}</p>
               <span className="hidden h-6 w-px bg-border md:block" aria-hidden="true" />
               <div className="flex items-center gap-3">

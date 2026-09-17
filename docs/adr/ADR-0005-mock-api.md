@@ -42,8 +42,8 @@ The handlers implement a small **stateful in-memory server**, not canned respons
 ### The chaos controls
 
 Implemented in `src/mocks/chaos.ts`, applied by `handlers.ts`, and available whenever the mock is on —
-so in a deployed demo too. Until the panel exists (after Phase 3), they are driven from the browser
-console through `window.novabizChaos`.
+so in a deployed demo too. They are driven from the **Mock API panel** (the "Mock API" button in the top bar), and
+from the browser console or Playwright through `window.novabizChaos`.
 
 | Control | Range | Default | Why it exists |
 |---|---|---|---|
@@ -113,8 +113,22 @@ clears anything forced. In the browser those are the defaults; a test that build
 settings gets its own back. It keeps settlement outcomes already fixed for existing transfers, since those
 were decided when the transfers were created.
 
-*Not yet built:* the panel UI, persisting the settings, and the visible "Mock API" badge — these need the
-Redux store from Phase 3.
+*The panel* (`src/features/mockControls/`): a "Mock API" button in the top bar on every page — a visible badge that the
+data is simulated, with a count when anything differs from a normal server, including a slow network — opens a side panel with the next-transfer outcome (each
+explained in terms of whether money was sent), the next settlement, network presets and sliders, "Reset demo data"
+behind a confirmation, and "Reset controls". It watches the controller through `subscribe`/`getSnapshot`, so an armed
+outcome disappears from the panel the moment a transfer uses it. It sits in the top bar rather than floating, so it can
+never cover the Send button.
+
+*Settings survive a reload; armed outcomes do not.* The network settings are saved to `localStorage`
+(`chaosSettingsStorage.ts`) and validated on load. A forced outcome is meant for the next transfer made now; firing it
+after a reload would surprise. **This departs from ADR-0004**, which planned the settings in a Redux preferences slice:
+the controller already owns them, and a second copy in Redux would be one more thing to keep in sync. The panel reaches
+the controller through a React context set when the mock starts, and **is lazy-loaded only then**, so neither it nor the
+mock code it uses is in the main bundle; a build without the mock never downloads it. (The first version imported it
+statically, which put `chaos.ts` in the main chunk while this ADR said otherwise; review caught it. Checked by searching
+the built main chunk for mock-only strings, in builds with and without the mock.) The browser's controller starts from
+the defaults and then applies the saved settings, so `novabizChaos.reset()` still means a normal server.
 
 ## Alternatives considered
 
@@ -205,9 +219,8 @@ slow connections pays this. Not yet resolved; see the implementation plan.
 ## How we would know we were wrong
 
 - A real backend is introduced and some environment is still mocking because `VITE_USE_MOCK` was
-  never set to `false` there. Planned mitigation (Phase 2, part 3): the chaos panel — present
-  whenever the mock is on — will carry a visible "Mock API" badge, so a mocked environment cannot be
-  mistaken for a live one.
+  never set to `false` there. Mitigation, built: the "Mock API" button is in the top bar whenever the mock is on, so a
+  mocked environment cannot be mistaken for a live one.
 
 - Handler logic grows past the point where it is obviously correct at a glance, and starts
   needing its own tests — at which point the "server" wants to be a real service.

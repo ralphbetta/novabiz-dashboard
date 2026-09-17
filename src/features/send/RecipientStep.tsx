@@ -40,7 +40,7 @@ export function RecipientStep() {
   const prefetchBalance = novabizApi.usePrefetch('getBalance')
   useEffect(() => { prefetchBalance(undefined) }, [prefetchBalance])
 
-  const { register, control, handleSubmit, setValue, setFocus, formState: { errors } } = useForm<RecipientFormValues, unknown, z.output<typeof recipientSchema>>({
+  const { register, control, handleSubmit, setValue, setFocus, setError, clearErrors, getValues, getFieldState, formState: { errors } } = useForm<RecipientFormValues, unknown, z.output<typeof recipientSchema>>({
     resolver: zodResolver(recipientSchema),
     defaultValues: { accountNumber: saved.accountNumber, bankCode: saved.bankCode },
     // Validate when leaving a field and on Continue, never while typing (ADR-0009); once shown, an error clears as
@@ -87,6 +87,13 @@ export function RecipientStep() {
 
   const selected = { accountNumber, bankCode }
 
+  // Digits only, at most 10. `inputMode="numeric"` only asks a phone for a number keypad; a desktop keyboard, or a paste,
+  // can still bring letters, spaces and dashes. Cleaned before the form records the value, so the counter and the
+  // lookup only ever see digits, with the caret kept after the same digit. No `maxLength`: it would cut "0123 456 789"
+  // to ten characters before the spaces go. An edit that would make more than ten digits is refused with a reason,
+  // rather than silently dropping the digits that do not fit.
+  const accountNumberField = register('accountNumber', { onChange: () => setContinuePressed(false) })
+
   return (
     <StepFrame step="recipient" aside={<RecentRecipientsPanel selected={selected} onChoose={choose} />}>
       <form noValidate onSubmit={handleSubmit(onValid, (invalid) => announce(problemMessage(invalid), 'assertive'))}>
@@ -101,11 +108,28 @@ export function RecipientStep() {
             label="Account number"
             inputMode="numeric"
             autoComplete="off"
-            maxLength={10}
             placeholder="0123456789"
             trailing={`${accountNumber.length}/10`}
             error={errors.accountNumber?.message ?? verifyProblem ?? undefined}
-            {...register('accountNumber', { onChange: () => setContinuePressed(false) })}
+            {...accountNumberField}
+            onChange={(event) => {
+              const input = event.target
+              const caret = input.selectionStart ?? input.value.length
+              const digits = input.value.replace(/\D/g, '')
+              if (digits.length > 10) {
+                const previous = getValues('accountNumber')
+                input.value = previous
+                input.setSelectionRange(previous.length, previous.length)
+                setError('accountNumber', { type: 'input', message: 'An account number has 10 digits' })
+                announce('There is a problem: An account number has 10 digits', 'assertive')
+                return accountNumberField.onChange(event)
+              }
+              const digitsBeforeCaret = input.value.slice(0, caret).replace(/\D/g, '').length
+              input.value = digits
+              input.setSelectionRange(digitsBeforeCaret, digitsBeforeCaret)
+              if (getFieldState('accountNumber').error?.type === 'input') clearErrors('accountNumber')
+              return accountNumberField.onChange(event)
+            }}
           />
 
           <Controller

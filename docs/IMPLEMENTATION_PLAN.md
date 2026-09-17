@@ -179,7 +179,41 @@ without Intl V3 string input; and a lint guard with a test proving it fires.
 
 ---
 
-### Phase 2 — The mock server (≈4h) ⭐ — ◐ mock API complete; chaos panel UI, persisted settings and "Mock API" badge pending (need the Phase 3 store)
+### Phase 2 — The mock server (≈4h) ⭐ — ✅ done (the panel, badge and saved settings were built after Phase 6)
+
+**Mock API panel — built after Phase 6.** A "Mock API" button in the top bar (a count when anything is set to fail)
+opens a side panel: next-transfer outcome, next settlement, network presets and sliders, "Reset demo data" behind a
+confirmation, "Reset controls". The chaos controller gained `subscribe`/`getSnapshot`, so an armed outcome clears in the
+panel when a transfer uses it. Settings are saved to `localStorage`; armed outcomes are not. The settings live in the
+controller rather than a Redux preferences slice as ADR-0004 planned (see ADR-0005). Tested: panel behaviour and axe
+(`MockApiControls.test.tsx`), the subscription (`chaosSubscribe.test.ts`), settings storage. Checked in Chrome at 1440 and
+360: arming "Timeout, money sent" from the panel, sending, the badge clearing, the receipt confirming then succeeding,
+the preset kept after a reload, focus back on the button after Escape. Cost at first: the main bundle grew from 207 to 215 kB
+gzipped, because the panel was imported statically — later lazy-loaded, bringing it to 212 kB. Found while checking it: skeleton placeholders meant to be round were square, because the default
+`rounded-md` beat the caller's `rounded-full` in Tailwind v4 — the same pitfall as button colours; fixed in `Skeleton`. Also
+found: a Phase 5 test that checked an error was gone from the whole page flickered, because the announcer's live region
+still (correctly) held the spoken message; it now checks inside the form, and still fails when the stale error returns. Reported
+by the product owner: the account number field accepted letters on a desktop keyboard (`inputMode="numeric"` only
+chooses a phone keypad). It now keeps digits only, at most 10, and a pasted "0123 456 789" keeps all ten digits (the
+`maxLength` that cut it first was removed). Confirmed by failing tests first; checked in Chrome with typing and a paste. Also reported:
+the amount field accepted letters and did not group digits while typing. It now formats as you type (grouping, one point,
+two decimals, leading minus kept so a pasted negative is rejected, not flipped), keeps the caret after the same digit,
+and Backspace/Delete beside a comma removes the digit rather than the comma. A property test checks the formatted text
+always parses to the same kobo as the digits typed. Checked in Chrome with typing, caret moves and a paste.
+
+**Fixed after review of the panel and the input changes** (each confirmed first — the amount cases by running the old
+formatter — then broken on purpose):
+- The amount field reinterpreted input it used to reject: "5000,50" became 500,050, "5,5" became 55, "1.000,50" became
+  1.00, and "1,000.505" lost a digit. Worse, two tests that had protected this were edited to fit. It now refuses such
+  edits with a reason (`applyAmountEdit`), refuses a second point, keeps zeros after the caret, and handles a deleted comma
+  on change for Android keyboards.
+- The panel imported mock code statically, so `chaos.ts` was in the main chunk while ADR-0005 said it was not. It is now
+  lazy-loaded once the mock starts; main chunk 212 kB gzipped (210 kB without the mock).
+- `novabizChaos.reset()` restored saved settings, not the defaults; the badge ignored a slow network; presets did not
+  cover every setting; the delay slider stopped at 10s; "15s" was hard-coded; the reset confirmation survived closing the
+  panel and used the primary style (a `danger` button variant now exists); a chaos watcher that threw could fail a mock
+  request; the account number field moved the caret to the end and silently dropped digits from an overflowing paste.
+
 
 **Part 1 — done: contracts and seed data.**
 - [src/api/contracts.ts](../src/api/contracts.ts) — Zod schemas for every endpoint. Wire (plain

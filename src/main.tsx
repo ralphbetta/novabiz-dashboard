@@ -9,12 +9,17 @@ import { persistOpenTransferKey, readOpenTransferKey } from './store/openTransfe
 import { transferDraft } from './store/transferDraftSlice'
 import { IdempotencyKeySchema } from './api/contracts'
 import { STARTUP_SLOW_MS, startupMessage, type StartupProblem } from './app/startup'
+import { MockControlsProvider } from './features/mockControls/MockControlsProvider'
+import type { MockControls } from './features/mockControls/mockControlsContext'
 
-/** Starts the mock API unless explicitly disabled. There is no real backend (ADR-0005). */
-async function startDataService(): Promise<void> {
-  if (import.meta.env.VITE_USE_MOCK === 'false') return
+/**
+ * Starts the mock API unless explicitly disabled. There is no real backend (ADR-0005). Resolves to the mock's controls,
+ * for the Mock API panel, or null when there is no mock.
+ */
+async function startDataService(): Promise<MockControls | null> {
+  if (import.meta.env.VITE_USE_MOCK === 'false') return null
   const { startMockApi } = await import('./mocks/browser')
-  await startMockApi()
+  return startMockApi()
 }
 
 /**
@@ -32,7 +37,8 @@ if (!root) throw new Error('Missing #root element in index.html')
 
 // Render at once rather than waiting for the mock API: requests wait for `serviceReady` inside the base query,
 // for a bounded time each, so screens show their own loading states meanwhile.
-const serviceReady = startDataService()
+const mockControls = startDataService()
+const serviceReady = mockControls.then(() => undefined)
 const slowNotice = setTimeout(() => setStartupAlert('slow'), STARTUP_SLOW_MS)
 serviceReady.then(
   () => { clearTimeout(slowNotice); setStartupAlert(null) },
@@ -53,7 +59,9 @@ if (restoredKey.success) store.dispatch(transferDraft.attemptRestored({ idempote
 createRoot(root).render(
   <StrictMode>
     <Provider store={store}>
-      <App />
+      <MockControlsProvider controls={mockControls}>
+        <App />
+      </MockControlsProvider>
     </Provider>
   </StrictMode>,
 )

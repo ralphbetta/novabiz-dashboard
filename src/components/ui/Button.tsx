@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes } from 'react'
 import { Link, type LinkProps } from 'react-router'
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'on-brand' | 'ghost-on-brand'
+type Variant = 'primary' | 'secondary' | 'ghost' | 'on-brand' | 'ghost-on-brand' | 'danger'
 
 const VARIANTS: Record<Variant, string> = {
   primary: 'bg-accent text-accent-fg hover:opacity-90',
@@ -9,6 +9,8 @@ const VARIANTS: Record<Variant, string> = {
   ghost: 'text-fg hover:bg-surface-muted',
   'on-brand': 'bg-brand-raised text-brand-fg hover:opacity-90',
   'ghost-on-brand': 'text-brand-fg hover:bg-brand-raised',
+  /** For an action that destroys data. */
+  danger: 'bg-danger text-accent-fg hover:opacity-90',
 }
 
 const BASE = 'inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition'

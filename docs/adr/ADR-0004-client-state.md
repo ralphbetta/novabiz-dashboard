@@ -23,7 +23,7 @@ Two plain **Redux Toolkit slices** in the **same store** as the API slice:
 store/
   index.ts              // configureStore: novabizApi.reducer + the two slices
   transferDraftSlice.ts // recipient, amount, step, attempt { id, idempotencyKey, status }
-  preferencesSlice.ts   // theme, chaos settings
+  preferencesSlice.ts   // theme, chaos settings  (chaos settings: see the note under Persistence)
 ```
 
 Components read with **narrow `useAppSelector` selectors**, never by selecting a whole slice:
@@ -69,7 +69,9 @@ profile.
 
 *Persistence, decided deliberately:*
 
-- **The preferences slice persists** (theme, and chaos settings so a demo survives a reload). A
+- **The preferences slice persists** (theme, and chaos settings so a demo survives a reload). *(Changed when the panel
+  was built: the chaos settings stay in the mock's own controller and are saved by the mock — see ADR-0005. Only the theme
+  is left for the preferences slice.)* A
   small `store.subscribe` writing two keys to `localStorage`, not `redux-persist` — for two
   fields, a rehydration library is machinery without a payoff.
 - **The transfer draft does not persist.** A half-entered transfer contains a recipient account

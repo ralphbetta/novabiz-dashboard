@@ -243,6 +243,10 @@ here. If you are about to produce one, produce the alternative instead.
 | `useAppSelector(s => s.transferDraft)` | Re-renders on every keystroke. Select the field. |
 | `redux-persist` for the theme | Rehydration machinery for two fields. → `docs/adr/ADR-0004-client-state.md` |
 | Client-side filtering of the loaded pages | Filters a partial dataset and shows a wrong answer. → `docs/adr/ADR-0008-transaction-feed.md` |
+| Relying on `inputMode="numeric"` or `maxLength` to keep a field digits-only | `inputMode` only picks a phone keypad; a desktop keyboard or a paste still brings letters, and `maxLength` cuts a pasted "0123 456 789" before cleaning. Filter in `onChange` (see `RecipientStep`). |
+| Reinterpreting an amount the merchant typed or pasted (dropping a comma, merging points, cutting decimals) | "5000,50" from a European keypad becomes ₦500,050. Refuse the edit and say why: `applyAmountEdit`. Never strip the minus either. |
+| Changing a test so it fits new behaviour that is less safe | That is how the amount field's comma bug got through. A test that stops passing is evidence; read it before rewriting it. |
+| Importing mock code (values, not types) into app components | It lands in the main bundle. Load mock-facing UI lazily, as `AppShell` does for the panel. |
 | `type="number"` for the amount field | Bad Android keypad, accepts `1e5`, scroll-wheel changes. → `docs/adr/ADR-0009-send-money-form.md` |
 | Adding MUI/Chakra "to move faster" | Deliberately rejected. → `docs/adr/ADR-0010-styling-responsive.md` |
 | Persisting the transfer draft to `localStorage` | Leaves an account number on a shared device. → `docs/adr/ADR-0004-client-state.md` |
@@ -250,6 +254,8 @@ here. If you are about to produce one, produce the alternative instead.
 | Infinite scroll or a *Load more* button for the transactions table | The table is paginated with rows per page. → `docs/adr/ADR-0016-paginated-transactions-table.md` |
 | Creating `tailwind.config.js` or a PostCSS config | Tailwind v4: the `@tailwindcss/vite` plugin and `@import "tailwindcss"`. Tokens live in `src/styles/index.css`. |
 | Changing a `Button`'s colour through `className` | In Tailwind v4 it does not reliably override the variant's colour. Add or use a variant. |
+| A component default like `rounded-md` that callers override through `className` | Same Tailwind v4 rule: the default can win. Apply the default only when the caller gives none (see `Skeleton`). |
+| Storing the chaos settings in Redux | The mock's controller owns them and saves them (ADR-0005). The panel reads it through `useChaosState`. |
 | Removing `'use no memo'` from `TransactionsTable` | The React Compiler memoises the virtualizer's output and rows go blank after scrolling. |
 | An `<Icon>` in a flex row without `shrink-0` | It shrinks to nothing. `Icon` adds `shrink-0` itself; keep it. |
 | `not-sr-only` on an element that has its own padding | It resets padding. Put the padding on an inner element. |

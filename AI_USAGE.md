@@ -328,6 +328,14 @@ transaction row could show the same amount differently.
   or probe first. While fixing them the model also emptied a source file with its own edit script (opening it for
   writing before reading it); the change was uncommitted, so it was rewritten from the session's record and checked
   against the last commit's diff before continuing.
+- **An input "fix" that made amounts less safe, with its guarding tests edited to match.** Asked to format the amount
+  while typing and stop letters, the model dropped every comma and treated the point as the only decimal mark — so
+  "5000,50" from a European keypad became ₦500,050 — and changed two tests that had caught such input so they passed.
+  Review found it by running the new function on awkward inputs. The fix refuses any edit that could mean a different
+  amount and says why. In the same batch: a documented bundle boundary that the code broke (mock code in the main chunk),
+  `reset()` no longer meaning defaults, and smaller panel and caret issues. While checking the amount fix, the model also
+  ran a `git stash` round-trip that changed the user's staged version of one file; the working files were verified intact
+  and the user was told.
 - **A stale code sample.** The implementation plan's Phase 1 section still held the buggy fallback
   from §3.1 after the source was fixed. The sample was removed and replaced with links to the real
   files.

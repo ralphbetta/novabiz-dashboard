@@ -14,7 +14,7 @@ view of money coming into the wallet, and a way to send money out. Built for the
 |---|---|---|
 | 0 | Scaffold, strict TypeScript, lint guards, test runner | ◐ Partly done |
 | 1 | Money module — kobo integers, formatting, parsing | ✅ Done |
-| 2 | MSW mock API — seeded ledger, pagination, idempotency, chaos controls | ◐ Mock API complete; chaos panel UI, saved settings and "Mock API" badge pending (need the Phase 3 store) |
+| 2 | MSW mock API — seeded ledger, pagination, idempotency, chaos controls, Mock API panel | ✅ Done (panel built after Phase 6) |
 | 3 | Data layer — Redux Toolkit store, RTK Query endpoints | ✅ Done; used by the dashboard screens |
 | 4 | Dashboard layout, balance summary, paginated transactions table | ✅ Done |
 | 5 | Send Money wizard — account lookup, recent recipients, optimistic send, settlement tracking | ◐ Built and tested; not yet reviewed |
@@ -51,8 +51,10 @@ All five currently pass.
 ## Trying the failure modes
 
 The mock API can be made slow, made to fail, or made to go silent — including *after* a transfer has
-gone through, which is the case the app's reconciliation exists for. Until the chaos panel is built,
-use the browser console while `npm run dev` is running:
+gone through, which is the case the app's reconciliation exists for. Open the **Mock API** button in the top bar: pick
+what the next transfer does ("Timeout, money sent", "Error, nothing sent"…), whether the next one settles, and the
+network presets. Network settings are kept after a reload; an armed outcome is used by the next transfer only. The same
+controls are available in the browser console (and to Playwright):
 
 ```js
 novabizChaos.forceNextTransfer('timeout-after-commit') // next transfer created goes through; reply held 60s
@@ -226,7 +228,8 @@ The brief leaves these open; each is a judgement call, recorded so it can be cha
 - **Mock bank names are invented.** The account lookup stands in for a real name enquiry (ADR-0018).
 - **Accessibility is checked with axe in component tests, not a lint plugin.** `eslint-plugin-jsx-a11y` does not
   support ESLint 10. axe in jsdom cannot check colour contrast, so a separate test checks the token pairs.
-- **No route lazy-loading yet.** The main JavaScript chunk is about 207 kB gzipped since Send Money was added.
+- **No route lazy-loading yet.** The main JavaScript chunk is about 212 kB gzipped (210 kB in a build without the mock);
+  the Mock API panel and the mock itself load separately.
 
 ## Repository layout
 

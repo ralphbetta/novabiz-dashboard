@@ -83,6 +83,7 @@ const TEXT_PAIRS: [string, string][] = [
   ['fg-muted', 'canvas'], ['fg-muted', 'surface'], ['fg-muted', 'surface-muted'],
   ['accent', 'canvas'], ['accent', 'surface'], ['accent', 'surface-muted'],
   ['accent-fg', 'accent'],
+  ['accent-fg', 'danger'], // Button's danger variant
   ['brand-fg', 'brand'], ['brand-fg', 'brand-raised'],
   ['brand-fg-muted', 'brand'], ['brand-fg-muted', 'brand-raised'],
   ['brand', 'brand-fg'],

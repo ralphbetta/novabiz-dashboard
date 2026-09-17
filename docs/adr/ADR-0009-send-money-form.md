@@ -34,7 +34,14 @@ dropped because a scheduled debit landed — is caught before submission rather 
 server.
 
 **Amount input handling:** the field is a text input with `inputMode="decimal"`, not
-`type="number"`. Number inputs on Android surface an inconsistent keypad, silently accept
+`type="number"`. *(As built, `src/features/send/amountInput.ts`: grouped while typing — "899889" shows "899,889" — with
+the caret kept after the same digit. **An edit that could mean a different amount is refused, never reinterpreted:** a
+typed comma (the decimal key on a phone set to a European region) is refused with "Use a point for kobo", a pasted amount
+with commas out of place or too many decimals is refused, and so is a second point — the field keeps what it had and says
+why. The first version dropped every comma, so "5000,50" became ₦500,050; review caught it. A leading minus is kept so a
+pasted negative shows an error instead of becoming a positive amount. Deleting the first digit keeps the zeros after the
+caret; removing only a comma removes the digit before it, handled on change because Android keyboards report keys as
+"Unidentified".)* Number inputs on Android surface an inconsistent keypad, silently accept
 `1e5`, and allow scroll-wheel changes on desktop — all three are wrong for a money field. The
 displayed value is formatted on blur; the parsed `Kobo` integer is what the schema validates.
 

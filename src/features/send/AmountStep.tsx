@@ -13,6 +13,7 @@ import { TextField } from '../../components/ui/TextField'
 import { formatAmount, formatNaira, parseNairaInput, toKobo } from '../../lib/money'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { transferDraft } from '../../store/transferDraftSlice'
+import { applyAmountEdit } from './amountInput'
 import { problemMessage } from './problemMessage'
 import { amountSchema, type AmountFormValues } from './schemas'
 import { StepActions, StepFrame, StepHeading } from './StepLayout'
@@ -35,7 +36,7 @@ export function AmountStep() {
   const { data: balance, isLoading: balanceLoading } = useGetBalanceQuery()
   const available = balance?.availableBalanceKobo
 
-  const { register, control, handleSubmit, getValues, setValue, formState: { errors } } = useForm<AmountFormValues, unknown, z.output<ReturnType<typeof amountSchema>>>({
+  const { register, control, handleSubmit, getValues, setValue, setError, clearErrors, getFieldState, formState: { errors } } = useForm<AmountFormValues, unknown, z.output<ReturnType<typeof amountSchema>>>({
     resolver: zodResolver(amountSchema(available)),
     defaultValues: { amount: amountInput, narration },
     mode: 'onBlur',
@@ -50,6 +51,13 @@ export function AmountStep() {
   }, [dispatch, amountNow, narrationNow])
 
   const typedKobo = parseNairaInput(amountNow)
+  const amountField = register('amount', {
+    // Complete a valid amount when leaving the field: "5,000.5" becomes "5,000.50".
+    onBlur: (event: { target: { value: string } }) => {
+      const kobo = parseNairaInput(event.target.value)
+      if (kobo !== null && kobo > 0) setValue('amount', formatAmount(kobo))
+    },
+  })
   const bank = bankByCode(recipient.bankCode)
 
   return (
@@ -87,13 +95,31 @@ export function AmountStep() {
               : available === undefined ? 'Your available balance could not be loaded. The bank will still check it.'
                 : <>Available balance: <span className="font-semibold text-fg tabular-nums">{formatNaira(available)}</span></>
           }
-          {...register('amount', {
-            // Tidy a valid amount into its grouped form when leaving the field: "5000.5" becomes "5,000.50".
-            onBlur: (event: { target: { value: string } }) => {
-              const kobo = parseNairaInput(event.target.value)
-              if (kobo !== null && kobo > 0) setValue('amount', formatAmount(kobo))
-            },
-          })}
+          {...amountField}
+          onKeyDown={(event) => {
+            // Delete just before a comma: step over it so the digit after it goes. (Backspace beside a comma is handled
+            // in applyAmountEdit, because Android keyboards often report every key as "Unidentified".)
+            const input = event.currentTarget
+            const at = input.selectionStart
+            if (event.key === 'Delete' && at !== null && at === input.selectionEnd && input.value.charAt(at) === ',') {
+              input.setSelectionRange(at + 1, at + 1)
+            }
+          }}
+          onChange={(event) => {
+            // Grouped as it is typed; an edit that could mean a different amount is refused, not reinterpreted
+            // (amountInput.ts).
+            const input = event.target
+            const { value, caret, problem } = applyAmountEdit(getValues('amount'), input.value, input.selectionStart ?? input.value.length)
+            input.value = value
+            input.setSelectionRange(caret, caret)
+            if (problem) {
+              setError('amount', { type: 'input', message: problem })
+              announce(problem, 'assertive')
+            } else if (getFieldState('amount').error?.type === 'input') {
+              clearErrors('amount')
+            }
+            return amountField.onChange(event)
+          }}
         />
 
         <div role="group" aria-label="Quick amounts" className="mt-3 grid grid-cols-4 gap-2">
