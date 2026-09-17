@@ -319,6 +319,15 @@ transaction row could show the same amount differently.
   was covered, and it was — at the button — but not where a duplicate would get past the idempotency key. Each was
   confirmed by a failing test or probe before the fix and broken on purpose afterwards. Fixing the "tracking gave up"
   message surfaced one more bug of the same kind: announcements keyed on status alone missed it.
+- **Phase 6: a test that passed alone and failed in its file.** The pause-while-hidden test counted lookups, and every
+  earlier test's store was still reconciling in the background. The model first suspected the action matching and
+  probed it before finding the leak; the fix was in the tests (stopping each store's listeners), not the tracker.
+- **Persistence and retry gaps found by review.** *Try again* assumed a cache that a released reconnect refetch had
+  already replaced; the demo-data reset could be undone by a save already on its way and left an unconfirmed-transfer
+  key behind; and two tabs erased each other's saved data even when one only read. Each was confirmed by a failing test
+  or probe first. While fixing them the model also emptied a source file with its own edit script (opening it for
+  writing before reading it); the change was uncommitted, so it was rewritten from the session's record and checked
+  against the last commit's diff before continuing.
 - **A stale code sample.** The implementation plan's Phase 1 section still held the buggy fallback
   from §3.1 after the source was fixed. The sample was removed and replaced with links to the real
   files.

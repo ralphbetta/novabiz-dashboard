@@ -5,6 +5,7 @@
  * transfer the server committed must leave the balance reduced and the row in place.
  */
 import { afterAll, afterEach, beforeAll, describe, it, expect } from 'vitest'
+import { clearAllListeners } from '@reduxjs/toolkit'
 import { setupServer } from 'msw/node'
 import { IDEMPOTENCY_HEADER, SendMoneyRequestSchema, type SendMoneyRequest } from './contracts'
 import { novabizApi as api, type TransactionsPageArgs } from './novabizApi'
@@ -32,7 +33,13 @@ beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' })
   server.events.on('request:start', ({ request: r }) => { if (r.method === 'POST') keysSent.push(r.headers.get(IDEMPOTENCY_HEADER)) })
 })
-afterEach(() => { server.resetHandlers(); keysSent.length = 0 })
+/** Stores made by a test: their transfer trackers outlive the test unless stopped. */
+const stores: AppStore[] = []
+afterEach(() => {
+  for (const store of stores.splice(0)) store.dispatch(clearAllListeners())
+  server.resetHandlers()
+  keysSent.length = 0
+})
 afterAll(() => server.close())
 
 async function setup({ force }: { force?: ForcedTransferOutcome } = {}) {
@@ -48,6 +55,7 @@ async function setup({ force }: { force?: ForcedTransferOutcome } = {}) {
   const db = createMockDb({ now: () => new Date(current), settlementOutcome: chaos.settlementOutcome })
   server.use(...createHandlers(db, { chaos, beforeProcessing: async (r) => { if (r.method === 'POST') await gates.post } }))
   const store = makeStore({ http: FAST, tracking: { initialIntervalMs: 5, maxIntervalMs: 5, giveUpAfterMs: 2_000 } })
+  stores.push(store)
   // Screens that are open: the balance, the first page of the table, and a filtered page the transfer does not match.
   await store.dispatch(api.endpoints.getBalance.initiate())
   await store.dispatch(api.endpoints.getTransactionsPage.initiate(FIRST_PAGE))

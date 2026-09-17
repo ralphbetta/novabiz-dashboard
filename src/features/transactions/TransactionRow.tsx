@@ -4,6 +4,7 @@ import { formatSignedNaira } from '../../lib/money'
 import { formatTransactionTime } from '../../lib/format'
 import { Icon } from '../../components/ui/Icon'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { useAppSelector } from '../../store/hooks'
 
 const CHANNEL_LABEL: Record<Channel, string> = {
   transfer: 'Bank transfer',
@@ -35,6 +36,12 @@ export function TransactionRow({
   const when = formatTransactionTime(new Date(t.createdAt), now)
   const description = t.description || CHANNEL_LABEL[t.channel]
   const amountTone = t.status === 'failed' ? 'text-fg-muted' : isCredit ? 'text-credit' : 'text-debit'
+  // Our own transfer whose outcome is unknown: "pending" would claim the bank has it, which is not known (ADR-0006).
+  const awaiting = useAppSelector((s) => {
+    const attempt = s.transferDraft.attempt
+    return t.idempotencyKey !== null && attempt?.status === 'unknown' && attempt.idempotencyKey === t.idempotencyKey
+  })
+  const badge = awaiting ? 'awaiting' : t.status
 
   return (
     <div
@@ -69,7 +76,7 @@ export function TransactionRow({
       </div>
 
       <div role="cell" className="sr-only sm:not-sr-only sm:w-32 sm:shrink-0">
-        <span className="sr-only sm:not-sr-only"><StatusBadge status={t.status} /></span>
+        <span className="sr-only sm:not-sr-only"><StatusBadge status={badge} /></span>
       </div>
 
       <div role="cell" className="flex shrink-0 flex-col items-end gap-1 sm:w-40">
@@ -79,7 +86,7 @@ export function TransactionRow({
         </span>
         {t.status !== 'successful' ? (
           <span aria-hidden="true" className="sm:hidden">
-            <StatusBadge status={t.status} />
+            <StatusBadge status={badge} />
           </span>
         ) : null}
       </div>

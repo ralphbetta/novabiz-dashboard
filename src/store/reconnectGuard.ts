@@ -1,17 +1,14 @@
 /**
- * Holds back the reconnect refetch while a transfer's outcome is open (ADR-0006).
+ * On reconnect, reconcile first, then refetch (ADR-0006).
  *
  * On reconnect RTK Query refetches every live query, replacing the cached balance and pages with the server's copy.
  * While a transfer is in flight, or its outcome is unknown, that would silently drop the optimistic change that is
  * deliberately kept: the receipt would say "may already have been sent" while the balance says nothing moved.
  *
- * So the `onOnline` action is held until the outcome is known (or the merchant starts over), then released, and the
- * refetch happens then — unless the connection dropped again in the meantime, in which case the next reconnect decides.
- * RTK only records the online flag; nothing else waits on it. Phase 6 replaces the wait with reconciling the unknown
- * transfer first.
- *
- * Known gap until then: an `unknown` attempt only ends when the merchant starts a different transfer, so a merchant who
- * leaves for the dashboard keeps the hold, and later reconnects do not refresh the balance or table.
+ * So the `onOnline` action is held here. The transfer tracker, which sits before this middleware, still sees it and
+ * checks the unknown transfer at once; when that settles the outcome — or reconciliation stops and the attempt needs
+ * attention — the held reconnect is released and the refetch happens then. If the connection drops again first, the
+ * held reconnect is dropped and the next one decides. RTK only records the online flag; nothing else waits on it.
  */
 import type { Middleware } from '@reduxjs/toolkit'
 import { novabizApi } from '../api/novabizApi'
@@ -19,9 +16,10 @@ import type { TransferDraftState } from './transferDraftSlice'
 
 type State = { transferDraft: TransferDraftState }
 
+/** Sending, or unknown and still being reconciled. Once it needs attention, the server's figures are the best there are. */
 const outcomeOpen = (state: State) => {
-  const status = state.transferDraft.attempt?.status
-  return status === 'sending' || status === 'unknown'
+  const attempt = state.transferDraft.attempt
+  return attempt?.status === 'sending' || (attempt?.status === 'unknown' && !attempt.needsAttention)
 }
 
 export const reconnectGuard: Middleware<object, State> = (store) => {

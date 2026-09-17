@@ -6,7 +6,7 @@
  */
 import type { ThunkAction, UnknownAction } from '@reduxjs/toolkit'
 import type { SendMoneyRequest } from '../api/contracts'
-import { novabizApi } from '../api/novabizApi'
+import { discardOptimisticTransfer, novabizApi } from '../api/novabizApi'
 import type { ApiExtra } from '../api/baseQuery'
 import { isDefiniteFailure, toApiError } from '../lib/errors'
 import { isAttemptOpen, transferDraft, type TransferDraftState } from './transferDraftSlice'
@@ -38,5 +38,35 @@ export function sendTransfer({ request, idempotencyKey = crypto.randomUUID() }: 
       dispatch(transferDraft.attemptUnknown({ idempotencyKey }))
     }
     return idempotencyKey
+  }
+}
+
+/**
+ * "Try again" for a transfer whose outcome is still unknown after reconciliation stopped. Sends the same request with
+ * the same key (ADR-0007), which is safe either way: if the first attempt landed, the server replays it; if it never
+ * did, this creates it exactly once. The optimistic change from the first attempt is still in the cache, so it is not
+ * applied again. Resolves to false when there is nothing to retry — an attempt restored after a reload has no request.
+ */
+export function retryTransfer(): ThunkAction<Promise<boolean>, State, ApiExtra, UnknownAction> {
+  return async (dispatch, getState) => {
+    const attempt = getState().transferDraft.attempt
+    if (attempt?.status !== 'unknown' || !attempt.needsAttention || !attempt.request) return false
+    const { idempotencyKey, request } = attempt
+    dispatch(transferDraft.retryStarted({ idempotencyKey }))
+
+    const result = await dispatch(novabizApi.endpoints.sendMoney.initiate({ request, idempotencyKey, retry: true }))
+    if (result.data) {
+      dispatch(transferDraft.attemptAccepted({ idempotencyKey, transfer: result.data.transfer }))
+    } else if (isDefiniteFailure(result.error)) {
+      // No patches to undo for a retry: take the kept change back by key.
+      discardOptimisticTransfer(dispatch, getState, idempotencyKey)
+      dispatch(transferDraft.attemptRejected({
+        idempotencyKey,
+        message: toApiError(result.error)?.error.message ?? 'The transfer could not be started. Nothing was sent.',
+      }))
+    } else {
+      dispatch(transferDraft.attemptUnknown({ idempotencyKey }))
+    }
+    return true
   }
 }

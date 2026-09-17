@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterAll, afterEach, beforeAll, describe, it, expect } from 'vitest'
+import { clearAllListeners } from '@reduxjs/toolkit'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { Provider } from 'react-redux'
@@ -24,13 +25,19 @@ beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' })
   server.events.on('request:start', ({ request }) => { if (request.method === 'POST') postKeys.push(request.headers.get(IDEMPOTENCY_HEADER)) })
 })
-afterEach(() => { server.resetHandlers(); postKeys.length = 0 })
+/** Stores made by a test: their transfer trackers outlive the test unless stopped. */
+const stores: AppStore[] = []
+afterEach(() => {
+  for (const store of stores.splice(0)) store.dispatch(clearAllListeners())
+  server.resetHandlers()
+  postKeys.length = 0
+})
 afterAll(() => server.close())
 
 const FIRST_PAGE = { filters: {}, limit: 25, cursor: null }
 const KEY = '3f1c9a52-7b3e-4d2a-9c1e-5a6b7c8d9e0f'
 
-function renderWizard() {
+function renderWizard({ tracking = {} }: { tracking?: { giveUpAfterMs?: number } } = {}) {
   let current = new Date('2026-09-16T10:30:00.000Z').getTime()
   const chaos = createChaosController({
     settings: { latencyMs: 0, jitterMs: 0 },
@@ -46,7 +53,8 @@ function renderWizard() {
       if (new URL(request.url).pathname === '/api/accounts/lookup') await gates.lookup
     },
   }))
-  const store = makeStore({ http: { baseUrl: BASE, timeoutMs: 300, retryBaseDelayMs: 1, retryMaxDelayMs: 2 }, tracking: { initialIntervalMs: 5, maxIntervalMs: 5 } })
+  const store = makeStore({ http: { baseUrl: BASE, timeoutMs: 300, retryBaseDelayMs: 1, retryMaxDelayMs: 2 }, tracking: { initialIntervalMs: 5, maxIntervalMs: 5, ...tracking } })
+  stores.push(store)
   // The transactions table has been opened, so its first page is cached and the optimistic row can be seen in it.
   void store.dispatch(novabizApi.endpoints.getTransactionsPage.initiate(FIRST_PAGE))
 
@@ -371,11 +379,11 @@ describe('Send Money — review and send', () => {
     await screen.findByRole('heading', { name: 'Review and send' })
     const before = available(store) ?? NaN
 
-    chaos.forceNextTransfer('timeout-after-commit')
+    chaos.forceNextTransfer('timeout-before-commit') // nothing is written, so reconciliation keeps checking
     await user.click(screen.getByRole('button', { name: 'Send ₦5,000.00' }))
 
-    expect(await screen.findByRole('heading', { name: /couldn.t confirm this transfer/ }, { timeout: 5000 })).toBeInTheDocument()
-    await waitFor(() => expect(assertive()).toHaveTextContent("We couldn't confirm this transfer. The money may already have been sent. Please don't send it again."))
+    expect(await screen.findByRole('heading', { name: 'We’re confirming this transfer' }, { timeout: 5000 })).toBeInTheDocument()
+    await waitFor(() => expect(assertive()).toHaveTextContent("We couldn't confirm this transfer yet. We're checking with the bank. The money may already have been sent. Please don't send it again."))
     expect(screen.queryByText(/not sent/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit transfer' })).not.toBeInTheDocument()
     expect(available(store)).toBe(before - 500_000)
@@ -530,5 +538,55 @@ describe('Send Money — review findings', () => {
     await screen.findByText(/This is more than your available balance/, { selector: 'p' })
 
     expect(screen.getByText('Description').nextElementSibling?.textContent).toBe('Rice supply')
+  })
+})
+
+describe('Send Money — reconciliation on the receipt', () => {
+  async function sendUnconfirmed(options: Parameters<typeof renderWizard>[0]) {
+    const harness = renderWizard(options)
+    await fillRecipient(harness.user)
+    await fillAmount(harness.user, '5,000')
+    await screen.findByRole('heading', { name: 'Review and send' })
+    harness.chaos.forceNextTransfer('timeout-before-commit') // nothing is written; every check misses
+    await harness.user.click(screen.getByRole('button', { name: 'Send ₦5,000.00' }))
+    await screen.findByRole('heading', { name: 'We’re confirming this transfer' }, { timeout: 5000 })
+    return harness
+  }
+
+  it('after checking without an answer, says so and offers Check status and Try again', async () => {
+    await sendUnconfirmed({ tracking: { giveUpAfterMs: 150 } })
+    expect(await screen.findByRole('heading', { name: 'We still can’t confirm this transfer' }, { timeout: 5000 })).toBeInTheDocument()
+    await waitFor(() => expect(assertive()).toHaveTextContent('We still can’t confirm this transfer. The money may already have been sent. Check its status before sending again.'))
+    expect(screen.getByRole('button', { name: 'Check status' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.getByText(/uses the same reference, so it cannot pay twice/)).toBeInTheDocument()
+  })
+
+  it('"Try again" sends the same request with the same key, and the transfer goes through once', async () => {
+    const { user } = await sendUnconfirmed({ tracking: { giveUpAfterMs: 150 } })
+    await screen.findByRole('heading', { name: 'We still can’t confirm this transfer' }, { timeout: 5000 })
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByRole('heading', { name: 'Transfer on its way' }, { timeout: 5000 })).toBeInTheDocument()
+    expect(postKeys).toHaveLength(2)
+    expect(postKeys[1]).toBe(postKeys[0])
+  })
+
+  it('"Check status" goes back to checking', async () => {
+    const { user } = await sendUnconfirmed({ tracking: { giveUpAfterMs: 150 } })
+    await screen.findByRole('heading', { name: 'We still can’t confirm this transfer' }, { timeout: 5000 })
+    await user.click(screen.getByRole('button', { name: 'Check status' }))
+    expect(await screen.findByRole('heading', { name: 'We’re confirming this transfer' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+  })
+
+  it('shows a transfer restored after a reload without its details, and cannot try it again', async () => {
+    const { store } = renderWizard({ tracking: { giveUpAfterMs: 150 } })
+    act(() => { store.dispatch(transferDraft.attemptRestored({ idempotencyKey: KEY })) })
+    expect(await screen.findByRole('heading', { name: 'We’re confirming this transfer' })).toBeInTheDocument()
+    expect(screen.getByText(/A transfer from before the page reloaded wasn’t confirmed/)).toBeInTheDocument()
+    expect(screen.queryByText('Recipient')).not.toBeInTheDocument()
+    await screen.findByRole('heading', { name: 'We still can’t confirm this transfer' }, { timeout: 5000 })
+    expect(screen.getByRole('button', { name: 'Check status' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
   })
 })

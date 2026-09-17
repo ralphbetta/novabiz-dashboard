@@ -31,7 +31,8 @@ export function makeStore({ serviceReady = Promise.resolve(), serviceWaitMs = DE
     },
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({ thunk: { extraArgument: extra } })
-        .prepend(reconnectGuard, createTransferTracker({ ...DEFAULT_TRACKING_CONFIG, ...tracking }).middleware)
+        // The tracker must come before the guard: it has to see a reconnect the guard holds back, and reconcile first.
+        .prepend(createTransferTracker({ ...DEFAULT_TRACKING_CONFIG, ...tracking }).middleware, reconnectGuard)
         .concat(novabizApi.middleware),
   })
 }

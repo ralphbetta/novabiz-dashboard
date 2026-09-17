@@ -190,9 +190,9 @@ when there is one. Until then, a miss means "not yet", nothing more.
 **reuses the same key**. That is safe in both cases: if the original eventually landed, the retry
 replays it; if it never did, the retry creates the transfer exactly once.
 
-**A mock-only limitation.** The mock server keeps its state in page memory, so after a reload it has
-forgotten every key — a same-key retry would create a second transfer *in the mock*. A real server's
-idempotency store is durable. See ADR-0005.
+**The mock's idempotency store is durable too.** It is saved to browser storage and restored after a reload (ADR-0005),
+so a same-key retry or a reconciliation after a reload finds the original, as a real server's would. (An earlier version
+kept it in page memory only, and a reload forgot every key.)
 
 Reconciliation runs in a listener middleware (`createListenerMiddleware`) rather than in a
 component, so it survives unmounting — a merchant who navigates away from the send screen must
@@ -216,7 +216,23 @@ of the *transfer*, not of any screen that happens to be mounted.
 - **Rows leave pages they no longer match** when their status changes.
 - **Reconnect waits.** `reconnectGuard` holds RTK Query's `onOnline` while an attempt is sending or unknown, and releases
   it when the outcome is known or the merchant starts over. Phase 6 replaces the wait with reconciling first.
-- **Not yet:** reconciling `unknown` (Phase 6). Until then the state is honest but does not resolve itself.
+
+## Implementation notes (Phase 6)
+
+- **One loop, two jobs.** `transferTracker` reconciles an `unknown` transfer and follows an accepted one until it
+  settles; both ask `getTransferByKey` with full-jitter backoff (1s ceiling doubling to 30s) for about two minutes of
+  checking time, paused while offline or hidden.
+- **What ends it:** a found transfer, or a rejection bound to the key — read from `error.rejected` on the lookup's own
+  error, not `isDefiniteFailure`, which also counts a request refused unsent. A 404 or any other error keeps checking.
+- **Taking the change back after reconciliation** removes rows by key and refetches the balance. The Phase 5 undo patches
+  are long gone by then, and replaying them onto refetched data would corrupt it.
+- **Needs attention** is a flag on an `unknown` attempt, not a fifth status: the outcome is still unknown. *Check status*
+  restarts the loop; *Try again* sends the same request with the same key without re-applying the optimistic change.
+- **Reconnect:** the tracker sits before `reconnectGuard`, so it sees the held reconnect and checks first; the guard
+  releases the refetch once the outcome is known or the attempt needs attention.
+- **Row label:** a row whose key belongs to an unknown attempt reads *Awaiting confirmation*, not *Pending*.
+- **Across a reload** only the key survives (ADR-0004); the restored attempt has no request, so it can be checked but not
+  retried.
 
 ## Alternatives considered
 

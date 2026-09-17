@@ -269,6 +269,14 @@ here. If you are about to produce one, produce the alternative instead.
 | Storing a validation message in state beside the thing it describes | It outlives the fix. Derive it from the current state plus a "Continue was pressed" flag. |
 | Showing the draft's typed text on the confirm screen | Show the built, sanitised request: that is what is sent (ADR-0013). |
 | Stacking side content (recents, summaries) above a form | Keep the main action above the fold: side panel on desktop, sticky buttons on phones. |
+| `isDefiniteFailure` on a reconciliation lookup | It counts a request refused unsent as definite; for a lookup that proves nothing. Read the lookup's own `error.rejected`. |
+| Taking back an unknown transfer on a 404 | A miss means "not yet": the POST may still land. Only a found transfer or a bound rejection ends reconciliation. |
+| Putting `reconnectGuard` before the transfer tracker | The tracker must see the held reconnect to reconcile first. |
+| Store tests that leave the transfer tracker running | Its loop outlives the test and adds requests to the next one. Dispatch `clearAllListeners()` after each test. |
+| Saving the mock database only after a request's reply | A held or failed reply would lose a committed transfer on reload. Save in `afterProcessing`, straight after the db call. |
+| Trusting the saved mock database | It is user-controlled storage: validate it (`loadMockDbSnapshot`) and fall back to the seed. |
+| A retry that assumes the first attempt's optimistic change is still cached | A released reconnect refetch may have replaced it. Add the row where missing and refetch the balance. |
+| Saving the mock database without checking for a reset in progress | A scheduled or late save writes the old data back. Save through `createMockPersistence`. |
 | A module-level flag for "first render" | Breaks under StrictMode and across tests. Use a per-instance `useRef`. |
 
 ---

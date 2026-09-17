@@ -81,7 +81,8 @@ The second bullet is a case where a regulatory constraint decided a technical qu
 the kind of thing the brief says strong candidates notice.
 
 *One exception to in-memory-only:* the **idempotency key of an in-flight attempt** is written to
-`sessionStorage` (the key alone — no amount, no recipient, no name). If the merchant force-closes
+`sessionStorage` (the key alone — no amount, no recipient, no name) *(built in Phase 6: `src/store/openTransferKey.ts`,
+kept while the attempt is sending or unknown, validated as a UUID on start)*. If the merchant force-closes
 the app mid-transfer and reopens it, we can still reconcile that attempt rather than stranding
 them. A bare UUID is not personal data, and losing the ability to reconcile is the larger harm.
 

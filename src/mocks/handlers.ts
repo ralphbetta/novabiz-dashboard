@@ -86,6 +86,11 @@ export interface HandlerOptions {
   beforeProcessing?: (request: Request) => Promise<void>
   /** Latency, injected errors and timeouts. Absent means a fast, perfectly reliable server. */
   chaos?: ChaosController
+  /**
+   * Called as soon as the database has handled a request — before any injected failure or held response — so a write
+   * is saved even when its reply is lost. The browser uses it to persist the data (persistence.ts).
+   */
+  afterProcessing?: (request: Request) => void
 }
 
 const simulatedError = () =>
@@ -97,7 +102,7 @@ interface Processed {
   createdTransferId?: string
 }
 
-export function createHandlers(db: MockDb, { beforeProcessing, chaos }: HandlerOptions = {}) {
+export function createHandlers(db: MockDb, { beforeProcessing, chaos, afterProcessing }: HandlerOptions = {}) {
   /**
    * An injected failure. An error answers 500 at once. A timeout holds `response` for TIMEOUT_HOLD_MS —
    * long after the client has given up — then releases it: see chaos.ts for why it is not held forever.
@@ -127,6 +132,7 @@ export function createHandlers(db: MockDb, { beforeProcessing, chaos }: HandlerO
     if (decision.failure?.when === 'before-commit') return inject(decision.failure, simulatedError())
 
     const { response, createdTransferId } = run()
+    afterProcessing?.(request)
     if (createdTransferId === undefined || !chaos) return response
 
     // A forced after-commit outcome, if armed, takes precedence over a random one.

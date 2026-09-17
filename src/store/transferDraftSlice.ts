@@ -20,7 +20,10 @@ export type WizardStep = 'recipient' | 'amount' | 'review' | 'result'
  * `successful` — settled.
  * `failed`     — definitely not sent (the server rejected it), or accepted and then failed to settle.
  * `unknown`    — the request may or may not have gone through: a timeout, a dropped connection, a 5xx.
- *                The optimistic change is kept, and the merchant is told not to send again (ADR-0006).
+ *                The optimistic change is kept, the merchant is told not to send again, and the transfer tracker
+ *                asks the server what happened under the key until it knows (ADR-0006). If it cannot find out in
+ *                about two minutes, the attempt `needsAttention`: the merchant can check again or try again with
+ *                the same key.
  */
 export type AttemptStatus = 'sending' | 'pending' | 'successful' | 'failed' | 'unknown'
 
@@ -39,13 +42,19 @@ export interface AttemptFailure {
 
 export interface TransferAttempt {
   idempotencyKey: string
-  request: SendMoneyRequest
+  /**
+   * What was sent. Null for an attempt restored after a reload: only the key is kept across one (ADR-0004), so the
+   * outcome can still be checked, but the details — an account number, a name — are not stored.
+   */
+  request: SendMoneyRequest | null
   status: AttemptStatus
   /** The bank reference, once the server has created the transfer. */
   reference: string | null
   failure: AttemptFailure | null
   /** True once the tracker has stopped checking a transfer that is still pending (ADR-0006). */
   trackingStopped: boolean
+  /** True once reconciliation has stopped without an answer for an `unknown` transfer (ADR-0006). */
+  needsAttention: boolean
 }
 
 export interface TransferDraftState {
@@ -121,7 +130,7 @@ export const transferDraftSlice = createSlice({
     /** Refused while another attempt's outcome is open, so it can never be silently replaced. */
     attemptStarted(state, action: PayloadAction<{ idempotencyKey: string; request: SendMoneyRequest }>) {
       if (isAttemptOpen(state.attempt)) return
-      state.attempt = { ...action.payload, status: 'sending', reference: null, failure: null, trackingStopped: false }
+      state.attempt = { ...action.payload, status: 'sending', reference: null, failure: null, trackingStopped: false, needsAttention: false }
       state.step = 'result'
     },
     /** The server created the transfer. Usually `pending`; a replayed key can return it already settled. */
@@ -148,6 +157,36 @@ export const transferDraftSlice = createSlice({
     attemptUnknown(state, action: PayloadAction<{ idempotencyKey: string }>) {
       if (state.attempt?.idempotencyKey !== action.payload.idempotencyKey) return
       state.attempt.status = 'unknown'
+      state.attempt.needsAttention = false
+    },
+    /** Reconciliation stopped without an answer. The outcome is still unknown; the optimistic change is still kept. */
+    attemptNeedsAttention(state, action: PayloadAction<{ idempotencyKey: string }>) {
+      if (state.attempt?.idempotencyKey !== action.payload.idempotencyKey || state.attempt.status !== 'unknown') return
+      state.attempt.needsAttention = true
+    },
+    /** "Check status": the tracker starts asking again. */
+    reconciliationRestarted(state, action: PayloadAction<{ idempotencyKey: string }>) {
+      if (state.attempt?.idempotencyKey !== action.payload.idempotencyKey) return
+      state.attempt.needsAttention = false
+      state.attempt.trackingStopped = false
+    },
+    /** "Try again" on an unknown attempt: the same request, with the same key (ADR-0007). */
+    retryStarted(state, action: PayloadAction<{ idempotencyKey: string }>) {
+      if (state.attempt?.idempotencyKey !== action.payload.idempotencyKey || state.attempt.status !== 'unknown') return
+      state.attempt.status = 'sending'
+      state.attempt.needsAttention = false
+    },
+    /**
+     * After a reload: an attempt whose outcome was open when the page went away, known only by its key. Shown as
+     * unknown, and checked like any other.
+     */
+    attemptRestored(state, action: PayloadAction<{ idempotencyKey: string }>) {
+      if (state.attempt) return
+      state.attempt = {
+        idempotencyKey: action.payload.idempotencyKey, request: null, status: 'unknown', reference: null, failure: null,
+        trackingStopped: false, needsAttention: false,
+      }
+      state.step = 'result'
     },
 
     /** "Edit transfer" after a definite failure: back to review with the details kept, and no attempt. */

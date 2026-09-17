@@ -18,7 +18,7 @@ view of money coming into the wallet, and a way to send money out. Built for the
 | 3 | Data layer — Redux Toolkit store, RTK Query endpoints | ✅ Done; used by the dashboard screens |
 | 4 | Dashboard layout, balance summary, paginated transactions table | ✅ Done |
 | 5 | Send Money wizard — account lookup, recent recipients, optimistic send, settlement tracking | ◐ Built and tested; not yet reviewed |
-| 6 | Reconciling transfers whose outcome is unknown | Not started (the `unknown` state is shown; nothing checks it yet) |
+| 6 | Reconciling transfers whose outcome is unknown | ◐ Built and tested; not yet reviewed |
 | 7 | Offline handling, retry, dark mode | Not started |
 | 8 | Component + Playwright E2E tests | Not started |
 | 9 | Docs, accessibility pass, polish | Not started |
@@ -62,10 +62,15 @@ novabizChaos.update({ latencyMs: 2000, errorRate: 0.2 })
 novabizChaos.reset()
 ```
 
-Run one, then send money from `/dashboard/send-money` to see the result. `error-after-commit` or `timeout-after-commit`
-shows the "We couldn't confirm this transfer" state, with the balance still reduced. Any account number starting
-**999** shows "No account found". Settings reset when the page reloads. Full reference:
-[ADR-0005](docs/adr/ADR-0005-mock-api.md).
+Run one, then send money from `/dashboard/send-money`:
+- `timeout-after-commit`: after the 15s client timeout the receipt says **"We're confirming this transfer"**, rows read
+  *Awaiting confirmation*, other pages show a notice, and about a second later reconciliation finds the transfer and it
+  settles. Reload during the check and the receipt comes back from the stored key.
+- `timeout-before-commit`: nothing is ever written, so every check misses; after about two minutes the receipt offers
+  **Check status** and **Try again** (same key, so it cannot pay twice).
+- Any account number starting **999** shows "No account found". Chaos settings reset when the page reloads; the mock's
+  data does not (see below). Full reference:
+  [ADR-0005](docs/adr/ADR-0005-mock-api.md).
 
 ## What is built
 
@@ -176,8 +181,7 @@ simulated latency, a configurable failure rate, and deterministic "force the nex
 or time out" controls, so error paths can be demonstrated on demand. →
 [ADR-0005](docs/adr/ADR-0005-mock-api.md)
 
-**Optimistic send: four states, not two** *(partly built — the rollback rule, the `unknown` state and settlement
-tracking are built; reconciling an `unknown` transfer is Phase 6)*. A timeout or `5xx` does not mean the transfer failed —
+**Optimistic send: four states, not two** *(built)*. A timeout or `5xx` does not mean the transfer failed —
 it may have gone through. So only an explicit rejection rolls back. An ambiguous outcome moves to
 an `unknown` state that keeps the balance reduced, tells the merchant not to resend, and reconciles
 against the server using the idempotency key. →
@@ -216,8 +220,9 @@ The brief leaves these open; each is a judgement call, recorded so it can be cha
 
 - **Not yet verified on a real low-end Android WebView:** the `₦` symbol fallback and `formatToParts`
   support. This is the strongest outstanding evidence gap for ADR-0002.
-- **An `unknown` transfer is not checked yet.** The receipt tells the merchant not to resend and the reconnect refetch
-  is held back, but nothing asks the server what happened until Phase 6, and a page reload loses the attempt.
+- **The mock's data is saved in the browser** (`localStorage`) so transfers survive a reload, like a real server. Run
+  `novabizMock.resetData()` in the console to start again from the seed. **Use one tab:** each tab keeps its own copy,
+  and if two tabs both send money, the last to save wins (ADR-0005).
 - **Mock bank names are invented.** The account lookup stands in for a real name enquiry (ADR-0018).
 - **Accessibility is checked with axe in component tests, not a lint plugin.** `eslint-plugin-jsx-a11y` does not
   support ESLint 10. axe in jsdom cannot check colour contrast, so a separate test checks the token pairs.

@@ -5,6 +5,9 @@ import { setupListeners } from '@reduxjs/toolkit/query'
 import './styles/index.css'
 import App from './app/App'
 import { makeStore } from './store'
+import { persistOpenTransferKey, readOpenTransferKey } from './store/openTransferKey'
+import { transferDraft } from './store/transferDraftSlice'
+import { IdempotencyKeySchema } from './api/contracts'
 import { STARTUP_SLOW_MS, startupMessage, type StartupProblem } from './app/startup'
 
 /** Starts the mock API unless explicitly disabled. There is no real backend (ADR-0005). */
@@ -37,8 +40,15 @@ serviceReady.then(
 )
 
 const store = makeStore({ serviceReady })
-// Enables refetchOnReconnect (ADR-0003). refetchOnFocus is off in the API slice.
+// Enables refetchOnReconnect (ADR-0003), and the online/visibility actions the transfer tracker pauses on.
 setupListeners(store.dispatch)
+
+// A transfer whose outcome was still open when the page went away: check it again (ADR-0004, ADR-0006). The stored
+// value is untrusted input, so only a well-formed key is used.
+const sessionStore = (() => { try { return window.sessionStorage } catch { return undefined } })()
+const restoredKey = IdempotencyKeySchema.safeParse(readOpenTransferKey(sessionStore))
+persistOpenTransferKey(store, sessionStore)
+if (restoredKey.success) store.dispatch(transferDraft.attemptRestored({ idempotencyKey: restoredKey.data }))
 
 createRoot(root).render(
   <StrictMode>

@@ -89,6 +89,15 @@ So it's on by default, and a `VITE_USE_MOCK=false` setting turns it off when a r
 dev server on your phone using your laptop's IP address (`http://192.168.x.x`), **the mock won't
 start and nothing will load.** For the real-phone test, use a deployed HTTPS link or a tunnel.
 
+## Your data survives a reload
+
+A real bank doesn't forget your transfer because you refreshed the page, so the fake one doesn't either. Everything the
+fake server knows — your transfers, your recent recipients, which references it has already seen — is saved in the
+browser and loaded again when the page opens. That's what lets an unconfirmed transfer be found after a reload, and
+"Try again" avoid paying twice.
+
+To start fresh, type `novabizMock.resetData()` in the browser console.
+
 ## What it costs me
 
 A service worker file to register, and the seed data has to stay in sync with the TypeScript

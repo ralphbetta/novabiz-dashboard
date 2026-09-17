@@ -50,6 +50,11 @@ export interface SendMoneyArgs {
   request: SendMoneyRequest
   /** Generated once per attempt and reused on every retry of it (ADR-0007). */
   idempotencyKey: string
+  /**
+   * A retry of an attempt whose optimistic change is already in the cache. Skips patching again, so the balance is
+   * not reduced twice.
+   */
+  retry?: boolean
 }
 
 const parseWith =
@@ -128,7 +133,18 @@ export const novabizApi = createApi({
        * Only the cache is touched here. The Send Money draft's record of the attempt belongs to `sendTransfer`
        * (src/store/sendTransfer.ts), so another caller of this endpoint cannot move the wizard.
        */
-      async onQueryStarted({ request, idempotencyKey }, { dispatch, getState, queryFulfilled }) {
+      async onQueryStarted({ request, idempotencyKey, retry = false }, { dispatch, getState, queryFulfilled }) {
+        if (retry) {
+          // Not patched again up front: the first attempt's change may still be cached. But it may not be — once the
+          // attempt needed attention, a held reconnect refetch was released and replaced it with the server's copy.
+          // So on success, add the row wherever it is missing and take the balance from the server, rather than
+          // assume. A rejection is handled by the caller with discardOptimisticTransfer.
+          const result = await queryFulfilled.catch(() => null)
+          if (!result) return
+          applyTransferToCache(dispatch, getState, result.data.transfer, { addWhereMissing: true })
+          void dispatch(novabizApi.endpoints.getBalance.initiate(undefined, { subscribe: false, forceRefetch: true }))
+          return
+        }
         const optimistic = optimisticTransaction(request, idempotencyKey, new Date())
         const fulfilledAt = (select: (state: ApiState) => { fulfilledTimeStamp?: number | undefined }) => select(getState()).fulfilledTimeStamp
 
@@ -190,19 +206,49 @@ type ApiState = { [novabizApi.reducerPath]: ReturnType<typeof novabizApi.reducer
 /**
  * Write the server's current version of a transfer into every cached page that shows it, matched by idempotency
  * key: replaces the optimistic row once the server answers, and updates the status once it settles. A page whose
- * filters the new version no longer matches — a "pending" page, once the transfer succeeds — loses the row.
+ * filters the new version no longer matches — a "pending" page, once the transfer succeeds — loses the row. With
+ * `addWhereMissing`, a first page the row belongs on but lacks gets it added.
  */
+/**
+ * Take back an optimistic transfer the server has proved was never made — a rejection bound to its key, found by
+ * reconciliation (ADR-0006). Removes its rows by key and refetches the balance, instead of replaying undo patches: by
+ * then the cache may have been refetched, and an undo would corrupt the fresh data.
+ */
+export function discardOptimisticTransfer(
+  dispatch: ThunkDispatch<ApiState, unknown, UnknownAction>,
+  getState: () => ApiState,
+  idempotencyKey: string,
+) {
+  for (const args of novabizApi.util.selectCachedArgsForQuery(getState(), 'getTransactionsPage')) {
+    dispatch(novabizApi.util.updateQueryData('getTransactionsPage', args, (page) => {
+      const before = page.items.length
+      page.items = page.items.filter((item) => item.idempotencyKey !== idempotencyKey)
+      page.totalCount = Math.max(0, page.totalCount - (before - page.items.length))
+    }))
+  }
+  void dispatch(novabizApi.endpoints.getBalance.initiate(undefined, { subscribe: false, forceRefetch: true }))
+}
+
 export function applyTransferToCache(
   dispatch: ThunkDispatch<ApiState, unknown, UnknownAction>,
   getState: () => ApiState,
   transfer: Transaction,
+  { addWhereMissing = false }: { addWhereMissing?: boolean } = {},
 ) {
   const key = transfer.idempotencyKey
   if (key === null) return
   for (const args of novabizApi.util.selectCachedArgsForQuery(getState(), 'getTransactionsPage')) {
     dispatch(novabizApi.util.updateQueryData('getTransactionsPage', args, (page) => {
       const index = page.items.findIndex((item) => item.idempotencyKey === key)
-      if (index === -1) return
+      if (index === -1) {
+        // Only for a retry whose first optimistic row may have been refetched away: newest first, so it belongs at the
+        // top of a first page whose filters it matches.
+        if (addWhereMissing && args.cursor === null && matchesFilters(transfer, args.filters)) {
+          page.items.unshift(transfer)
+          page.totalCount += 1
+        }
+        return
+      }
       if (matchesFilters(transfer, args.filters)) {
         page.items[index] = transfer
       } else {

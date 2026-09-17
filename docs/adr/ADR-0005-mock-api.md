@@ -165,11 +165,23 @@ the store: a seed transfer can be looked up, and its key can never be reused for
 Pending seed rows settle a few minutes after the mock starts — visible as pending first, never holding
 funds forever.
 
-*Known limitation: state is not durable.* The mock server lives in page memory. A reload or a second tab
-starts a fresh server that has forgotten every transfer and key created before it, and ids and
-reference numbers start again from the same sequence. A real server is durable, and ADR-0006's retry
-safety depends on that. Persisting the mock's state to browser storage would close most of the gap
-and is recorded as an open option rather than built.
+*State survives a reload* (decided by the product owner: "we can't be losing data on reload"). The whole mock database
+— the ledger, idempotency records including bound rejections, pending settlements, beneficiaries and the id sequence —
+is saved to `localStorage` (`src/mocks/persistence.ts`) and restored on start. A write is saved the moment the database
+commits it, before any held or failed reply, so a reload straight after sending cannot lose it; reads are saved at most
+every 250 ms, because reading can settle a pending transfer; a pending save is flushed on `pagehide`. Saved data is
+untrusted: it is validated against the contract on load, and anything malformed, from another version or another seed
+is discarded for the seed. `novabizMock.resetData()` clears it, blocks every later save (one already scheduled, one from
+a request finishing before the unload, the `pagehide` save) so none can write the old data back, and forgets the app's
+open-transfer key, which would otherwise be checked against the fresh data. This is what makes ADR-0006's same-key
+*Try again* and reconciliation after a reload work in the demo as they would against a real, durable server.
+
+*The mock supports one tab.* Each tab holds its own copy of the database and saves all of it to the same key. A tab
+only saves when its own data has changed, so a tab that merely reads cannot erase a transfer made in another; but if two
+tabs both write, the last to save wins, and a transfer from the other tab can be lost. Syncing tabs through the `storage`
+event was considered and not built: a mock does not need it, and a real server has one database. The chaos settings reset
+on reload. The saved data includes beneficiaries' full account numbers; in production that data lives on the bank's
+servers, never in the browser.
 
 *Startup never leaves a blank page.* `index.html` shows a loading message from first paint, before any
 JavaScript. The app then renders at once and requests wait for the worker, each for a bounded time; a

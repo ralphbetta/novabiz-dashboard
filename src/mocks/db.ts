@@ -46,6 +46,27 @@ export interface MockDbOptions {
   seed?: number
   settlementDelayMs?: number
   settlementOutcome?: (transfer: TransactionWire) => SettlementOutcome
+  /** Start from saved state instead of the seed, so the mock survives a reload (see persistence.ts). */
+  snapshot?: MockDbSnapshot
+}
+
+/** What processing an idempotency key produced: a created transfer, or a rejection bound to the key. */
+export type KeyOutcome = { kind: 'transfer'; transferId: string } | { kind: 'rejected'; failure: Failure }
+export interface IdempotencyRecord { fingerprint: string | null; outcome: KeyOutcome }
+export interface Settlement { settlesAt: number; useHook: boolean }
+
+/** Bump when the shape changes: an older snapshot is then discarded and the seed is used. */
+export const MOCK_DB_SNAPSHOT_VERSION = 1
+
+/** Everything the mock server knows, as plain JSON. */
+export interface MockDbSnapshot {
+  version: typeof MOCK_DB_SNAPSHOT_VERSION
+  seed: number
+  transactions: TransactionWire[]
+  nextSequence: number
+  settlements: [string, Settlement][]
+  idempotency: [string, IdempotencyRecord][]
+  beneficiaries: BeneficiaryWire[]
 }
 
 export interface TransferResult {
@@ -99,14 +120,15 @@ export function createMockDb(options: MockDbOptions) {
   const { now, seed = SEED, settlementDelayMs = DEFAULT_SETTLEMENT_DELAY_MS } = options
   const settlementOutcome = options.settlementOutcome ?? (() => ({ status: 'successful' }) as const)
 
-  const transactions: TransactionWire[] = generateSeedTransactions({ now: now(), seed })
+  const { snapshot } = options
+  const transactions: TransactionWire[] = snapshot ? structuredClone(snapshot.transactions) : generateSeedTransactions({ now: now(), seed })
   /** Continues the seed's id sequence, so every new id sorts after every seed id. */
-  let nextSequence = SEED_TRANSACTION_COUNT
+  let nextSequence = snapshot ? snapshot.nextSequence : SEED_TRANSACTION_COUNT
   /**
    * Settlement schedule. `useHook` is false for seed rows, which always settle successfully; the
    * outcome hook is for API-created transfers, where Part 3's chaos controls plug in.
    */
-  const settlements = new Map<string, { settlesAt: number; useHook: boolean }>()
+  const settlements = new Map<string, Settlement>(snapshot ? structuredClone(snapshot.settlements) : [])
 
   /**
    * Idempotency key -> what processing that key produced, and a fingerprint of the payload.
@@ -117,13 +139,12 @@ export function createMockDb(options: MockDbOptions) {
    * refused and succeed. A `null` fingerprint marks a key with no known payload (seed rows): any request
    * reusing it is a conflict.
    */
-  type KeyOutcome = { kind: 'transfer'; transferId: string } | { kind: 'rejected'; failure: Failure }
-  const idempotency = new Map<string, { fingerprint: string | null; outcome: KeyOutcome }>()
+  const idempotency = new Map<string, IdempotencyRecord>(snapshot ? structuredClone(snapshot.idempotency) : [])
 
   // Seed rows that carry a key are registered, so they can be looked up and their keys cannot be reused.
   // Pending seed rows get a settlement schedule, so they do not hold funds forever.
   const startedAt = now().getTime()
-  for (const t of transactions) {
+  for (const t of snapshot ? [] : transactions) {
     if (t.idempotencyKey !== null) {
       idempotency.set(t.idempotencyKey, { fingerprint: null, outcome: { kind: 'transfer', transferId: t.id } })
     }
@@ -168,7 +189,7 @@ export function createMockDb(options: MockDbOptions) {
    * Payees the merchant has paid before, newest first. Seeded with the fixed directory accounts, paid on earlier days;
    * every transfer the server accepts moves its recipient to the front.
    */
-  const beneficiaries: BeneficiaryWire[] = Object.entries(KNOWN_ACCOUNTS).map(([key, accountName], index) => {
+  const beneficiaries: BeneficiaryWire[] = snapshot ? structuredClone(snapshot.beneficiaries) : Object.entries(KNOWN_ACCOUNTS).map(([key, accountName], index) => {
     const [bankCode = '', accountNumber = ''] = key.split(':')
     return { bankCode, accountNumber, accountName, lastPaidAt: new Date(now().getTime() - (index + 1) * DAY_MS).toISOString() }
   })
@@ -342,6 +363,19 @@ export function createMockDb(options: MockDbOptions) {
       const accountName = accountHolder(query.bankCode, query.accountNumber)
       if (accountName === null) return fail('NOT_FOUND', 'No account was found with this number at this bank.')
       return { ok: true, value: { ...query, accountName } }
+    },
+
+    /** Everything, as plain JSON, to save and restore with `createMockDb({ snapshot })`. */
+    snapshot(): MockDbSnapshot {
+      return structuredClone({
+        version: MOCK_DB_SNAPSHOT_VERSION,
+        seed,
+        transactions,
+        nextSequence,
+        settlements: [...settlements.entries()],
+        idempotency: [...idempotency.entries()],
+        beneficiaries,
+      })
     },
 
     listBeneficiaries(): Result<BeneficiariesWire> {

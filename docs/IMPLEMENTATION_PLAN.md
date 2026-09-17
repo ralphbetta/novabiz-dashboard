@@ -502,7 +502,7 @@ ADR-0006's core and is graded on its own, so it is a separate phase whose diff r
 `unknown` state honest in the meantime: nothing is rolled back, the merchant is told not to resend, and a reconnect
 cannot overwrite the kept change. A reload loses the key until Phase 6. A Playwright run is Phase 8.
 
-**Known gap until Phase 6:** an `unknown` attempt only ends when the merchant presses *Start a different transfer*. A
+**Known gap until Phase 6 (since closed — see Phase 6):** an `unknown` attempt only ends when the merchant presses *Start a different transfer*. A
 merchant who goes to the dashboard instead keeps the reconnect hold for the rest of the session, so later reconnects do
 not refresh the balance or the table. Reconciliation removes this. (A held reconnect is dropped if the connection goes
 again before the outcome is known — fixed after review, with a test.)
@@ -512,42 +512,80 @@ again before the outcome is known — fixed after review, with a test.)
 
 ---
 
-### Phase 6 — Reconciliation (≈3h) ⭐⭐⭐
+### Phase 6 — Reconciliation (≈3h) ⭐⭐⭐ — ◐ built and tested; awaiting review
 
-**The graded phase.** Do it with a clear head, not at 2am.
+**Original plan:** four attempt states; undo only on a definite failure; on `unknown` keep the patches, label the row
+*Awaiting confirmation*, and reconcile in listener middleware with backoff (1/2/4/8s, capped at 30s, full jitter),
+pausing while hidden or offline, giving up after ~2 minutes into *needs attention* with *Check status*; *Try again*
+reuses the key; on reconnect, reconcile before anything refetches.
 
-1. Extend the attempt status in `transferDraftSlice` to `pending | settled | failed | unknown`.
-2. Replace the bare `catch` with a branch on `isDefiniteFailure` — undo the patches **only** on a
-   definite failure. This is the single most important diff in the project.
-3. On `unknown`: **keep the patches.** Mark the row *Awaiting confirmation*, keep the balance
-   reduced, announce assertively, dispatch `startReconciliation`.
-4. `reconcileMiddleware` (`createListenerMiddleware`) polls `getTransferByKey` with backoff
-   (1/2/4/8s, capped at 30s, full jitter), pauses while the tab is hidden or offline, resumes on
-   `online`, and gives up after ~2 minutes into a `needs attention` state with a manual *Check
-   status* action. **Middleware, not `useEffect`** — reconciliation must survive the merchant
-   navigating away from the send screen.
-5. Wire *Try again* to reuse the same key from the slice.
+**Built:**
+- **`transferTracker`** (listener middleware) now does both jobs in one loop: reconciling an `unknown` transfer and
+  following an accepted one until it settles. It asks `getTransferByKey` with full-jitter backoff (1s ceiling doubling
+  to 30s) for about two minutes of checking time. A found transfer resolves it (`pending` → keep following; settled →
+  write it in, refresh the balance). A rejection bound to the key takes the change back by key and refreshes the balance.
+  A 404, an error, or a lookup refused unsent is not an answer. It pauses while offline or hidden (tracked from RTK
+  Query's own online/focus actions), wakes at once when either ends, and does not count paused time.
+- **Needs attention** after the checking time runs out: *Check status* restarts the loop; *Try again* (`retryTransfer`)
+  sends the same request with the same key and does not apply the optimistic change twice (`retry: true`).
+- **Reconnect reconciles first:** the tracker sits before `reconnectGuard`, sees the reconnect the guard holds, checks
+  at once, and the guard releases the refetch when the outcome is known or the attempt needs attention. This removes
+  Phase 5's known gap: an unknown transfer no longer holds refetches for the whole session.
+- **Rows** of an unknown transfer read *Awaiting confirmation*. **A notice** on every other page says a transfer is
+  being confirmed and not to send it again.
+- **Across a reload:** the key alone is kept in `sessionStorage` while the outcome is open (ADR-0004), validated as a
+  UUID on start, and the attempt is restored as `unknown` without its details, then checked like any other. *Try again*
+  is not offered for it: there is no request to send.
 
-**Test it manually as you go** using `chaos.forceNext = 'timeout'`, with Redux DevTools open —
-the action sequence is your proof the branch works, and rehearsing that view is how you'll demo
-it on interview day. Verify the case that
-matters: **timeout on a transfer the server DID commit**. The row must survive and the balance
-must not be restored.
+**Tested:** `reconciliation.test.ts` (14, store level against the mock): found pending then settled; a slow POST that
+lands after lookups missed it; a bound rejection; misses never undo and end in needs attention; a lookup refused unsent is
+not a rejection; pause and resume offline and while hidden; reconnect checks before the balance refetches; *Check
+status*; *Try again* creates once or replays once; restored attempts; key persistence with storage that throws. Wizard
+tests for the checking, needs-attention and restored receipts, *Try again* and *Check status*; component tests for the
+*Awaiting confirmation* badge and the notice. Each key rule was broken on purpose (a 404 treated as a rejection, a lookup
+refused unsent treated as one, no pause, guard before tracker, retry patching again, never needing attention); every
+break failed a test.
 
-**Done when:** all four failure modes behave per ADR 0006, demonstrated by hand.
+**Checked in Chrome:** `timeout-after-commit` → "We're confirming this transfer" after the 15s client timeout → the
+notice on Transactions → resolved about a second later → "Transfer successful"; a reload mid-check restores the
+"confirming" receipt from the stored key. The needs-attention path takes over two minutes with real timings and was
+checked in tests only.
 
-**Also required in this phase, not Phase 7:** on reconnect, reconcile every `unknown` transfer *before* any
-query refetches. RTK Query's `refetchOnReconnect` is already on (Phase 3). Once optimistic transfers exist, a
-reconnect would otherwise refetch the balance over an unresolved transfer and overwrite the optimistic
-change — the exact false "nothing moved" ADR-0006 prevents. If Phase 6 cannot do this ordering, turn
-`refetchOnReconnect` off until it can.
+**Found while building:**
+- A test for pausing while hidden passed alone and failed in its file: each test's store kept its reconciliation loop
+  running after the test and added lookups to the next test's count. Tests now stop every store's listeners afterwards.
+- A lookup must not use `isDefiniteFailure`: that counts a request refused unsent as definite, which is right for the POST
+  and wrong for a lookup, where it proves nothing about the transfer.
+- The Phase 5 reconnect test used a transfer that went through; with reconciliation it now resolves, so the test uses
+  one that never lands.
+
+**Known limitations:**
+- ~~The mock server forgets every key on reload, so a restored attempt only ever misses.~~ Fixed at the product owner's
+  request: the mock database is saved to `localStorage` and restored (ADR-0005, `src/mocks/persistence.ts`). Checked in
+  Chrome: a transfer and the balance survive a reload, and an unconfirmed transfer reloaded mid-check is found and
+  settles.
+- An `unknown` attempt is the only one tracked across a reload; an accepted, pending one is not, because the table's next
+  fetch shows its state.
+
+**Fixed after review of Phase 6 and persistence** (each confirmed first by a failing test or probe, then broken on purpose):
+- *Try again* after the cache had been refetched left no row and an unreduced balance: once an attempt needs attention
+  the held reconnect refetch replaces the optimistic change, and the retry assumed it was still cached. A successful
+  retry now adds the row where it is missing and refetches the balance.
+- `novabizMock.resetData()` could be undone by a save already scheduled or by a request finishing before the unload,
+  and left the open-transfer key behind. Reset now blocks every later save and clears the key (`createMockPersistence`).
+- Two tabs overwrote each other's saved database even when one only read. A tab now saves only when its own data has
+  changed; the mock is documented as one-tab (ADR-0005). Checked in Chrome: a reset mid-confirmation restores the seed
+  balance and leaves no key and no notice.
+
+**Done when:** all four failure modes behave per ADR 0006. Met in tests for all four forced outcomes; demonstrated by hand
+for `timeout-after-commit`.
 
 ---
 
 ### Phase 7 — Resilience, dark mode, offline (≈2h)
 
-Backoff with jitter for reads. Online/offline banner; Send disabled while offline with an
-explanation. Cached-data age label. Reconcile-before-refetch on reconnect. Dark mode toggle
+Backoff with jitter for reads (done in Phase 3). Online/offline banner; Send disabled while offline with an
+explanation. Cached-data age label. (Reconcile-before-refetch on reconnect: done in Phase 6.) Dark mode toggle
 persisted via the preferences slice subscriber. Contrast test over the token values.
 
 ---

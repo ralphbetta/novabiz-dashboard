@@ -4,6 +4,7 @@ import { IconButton } from '../components/ui/Button'
 import { formatLongDate } from '../lib/format'
 import { MERCHANT } from './merchant'
 import { NavList } from './navigation'
+import { OpenTransferNotice } from './OpenTransferNotice'
 
 function Brand() {
   return (
@@ -121,6 +122,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
         </header>
 
         <main id="main" tabIndex={-1} className="mx-auto max-w-[96rem] px-4 pt-6 pb-16 focus:outline-none sm:px-6 lg:px-8">
+          <OpenTransferNotice />
           {children}
         </main>
       </div>

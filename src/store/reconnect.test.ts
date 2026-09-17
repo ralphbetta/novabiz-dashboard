@@ -7,6 +7,7 @@
  * merchant starts over.
  */
 import { afterAll, afterEach, beforeAll, describe, it, expect } from 'vitest'
+import { clearAllListeners } from '@reduxjs/toolkit'
 import { setupServer } from 'msw/node'
 import { SendMoneyRequestSchema } from '../api/contracts'
 import { novabizApi as api } from '../api/novabizApi'
@@ -30,7 +31,13 @@ beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' })
   server.events.on('request:start', ({ request: r }) => { if (new URL(r.url).pathname === '/api/balance') balanceRequests.push(r.method) })
 })
-afterEach(() => { server.resetHandlers(); balanceRequests.length = 0 })
+/** Stores made by a test: their transfer trackers outlive the test unless stopped. */
+const stores: ReturnType<typeof makeStore>[] = []
+afterEach(() => {
+  for (const store of stores.splice(0)) store.dispatch(clearAllListeners())
+  server.resetHandlers()
+  balanceRequests.length = 0
+})
 afterAll(() => server.close())
 
 async function storeWithUnknownTransfer() {
@@ -39,9 +46,11 @@ async function storeWithUnknownTransfer() {
     random: () => 0.99,
     sleep: (ms) => (ms === TIMEOUT_HOLD_MS ? new Promise<never>(() => {}) : Promise.resolve()),
   })
-  chaos.forceNextTransfer('error-after-commit')
+  // Nothing is written, so reconciliation never finds it and the outcome stays unknown.
+  chaos.forceNextTransfer('error-before-commit')
   server.use(...createHandlers(createMockDb({ now: () => new Date('2026-09-16T10:30:00.000Z') }), { chaos }))
   const store = makeStore({ http: { baseUrl: BASE, retryBaseDelayMs: 1, retryMaxDelayMs: 2 } })
+  stores.push(store)
   // The balance is on screen: a live subscription, which is what refetchOnReconnect refetches.
   store.dispatch(api.endpoints.getBalance.initiate())
   await expect.poll(() => api.endpoints.getBalance.select()(store.getState()).data).toBeDefined()
