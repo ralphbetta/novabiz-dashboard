@@ -624,19 +624,25 @@ persisted via the preferences slice subscriber. Contrast test over the token val
 
 ---
 
-### Phase 8 — Tests (≈4h) — ✅ done (awaiting review)
+### Phase 8 — Tests (≈4h) — ◐ built and tested; not yet reviewed
 
-**Built:** Playwright suite (`npm run e2e`) against a production build at 360px and 1440px: the six ADR-0011 flows plus the
-phone menu and two reload flows — 12 passing runs and 2 skipped by design (flow 4 runs at desktop size only; the drawer
-test at phone size only). Money asserted against the mock's ledger by idempotency key. Each flow was broken on purpose and
-failed (see ADR-0011's notes). Component tests were already written phase by phase (684 now), including axe and the
-keyboard-only wizard. Details and trade-offs in ADR-0011 — *Implementation notes (Phase 8)*.
+**Built:** Playwright suite (`npm run e2e`) against a fresh production build: 9 tests at 360px and 1440px, 18 runs — 16
+pass, 2 skipped by design (flow 4 runs at desktop size only; the drawer test at phone size only). The six ADR-0011 flows,
+two reload flows and the phone menu. Money asserted against the mock's ledger by idempotency key, against the server's
+balance moving exactly once, and — where the app changes it optimistically — against the balance shown on screen.
+Component tests were already written phase by phase (684 now). Details, and a recorded table of which regressions each
+test catches (and one it does not), in ADR-0011 — *Implementation notes (Phase 8)*.
 
-**Found while building:** flow 3's first run could not see *Awaiting confirmation*: reconciliation resolved the transfer
-about a second after the timeout, before the test looked. The test now slows the mock once the POST is on its way. One
-mutation check first broke the build's type check rather than the behaviour, so no test ran; it was redone with a change
-that compiles.
+**Fixed after review of the first suite:** flow 3 never checked the shown balance, and flow 1 never checked the pending
+row — both confirmed by making those regressions and watching the old tests pass. "No duplicate" was checked only for one
+key; flows 4, 5 and both reload flows now also check the server's balance moved exactly once. Flow 2's balance check was
+loose and would have failed a sensible future refetch; it is now exact but accepts either correct figure, and its
+meaningless range check now compares with the count before. Config: no reusing a running server, no retries; flow 6 no
+longer waits for `networkidle`; flow 4 has 5 minutes. Run counts and status wording in these docs corrected.
 
+**Found while building:** flow 3's first run could not see *Awaiting confirmation* (reconciliation resolved first); the test
+slows the mock once the POST is on its way. Flow 1 raced the same way on mobile when latency was reset too early. One
+break-on-purpose check first broke the build's type check, so no test ran; it was redone with a change that compiles.
 
 Component tests per ADR 0011, including the keyboard-only wizard traversal and axe on
 every screen. Then the six Playwright flows. **Write test 3 (timeout-but-committed) first** —

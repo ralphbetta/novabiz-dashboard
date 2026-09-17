@@ -336,6 +336,14 @@ transaction row could show the same amount differently.
   `reset()` no longer meaning defaults, and smaller panel and caret issues. While checking the amount fix, the model also
   ran a `git stash` round-trip that changed the user's staged version of one file; the working files were verified intact
   and the user was told.
+- **End-to-end tests that could not fail for the reason they existed.** The model's first Playwright suite passed, and
+  its docs said each flow had been broken on purpose. Review found the key timeout test never read the balance on
+  screen, only the server's, so an app that kept the row but put the shown balance back still passed; the happy path
+  never looked for the pending row; "no double send" was checked for one idempotency key only, which a second send
+  under a new key slips past. Making each of these regressions confirmed the old tests passed them. The tests now read
+  the shown balance and check the server's balance moved exactly once; the results are recorded per change in
+  ADR-0011, including one the reload test still does not catch. The docs also miscounted the runs and called the phase
+  done before review.
 - **A stale code sample.** The implementation plan's Phase 1 section still held the buggy fallback
   from §3.1 after the source was fixed. The sample was removed and replaced with links to the real
   files.

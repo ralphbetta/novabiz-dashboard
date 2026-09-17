@@ -131,3 +131,20 @@ export async function transferOutsideApp(page: Page, amountKobo: number) {
 export async function hasHorizontalScroll(page: Page): Promise<boolean> {
   return page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
 }
+
+/**
+ * The available balance the app is showing on the dashboard, in kobo — what the merchant sees, which the app changes
+ * optimistically, as opposed to `serverAvailableKobo`. Amounts are shown with exactly two decimals, so the digits alone
+ * are the kobo.
+ */
+export async function shownAvailableKobo(page: Page): Promise<number> {
+  const figure = page.getByTestId('available-balance')
+  await expect(figure).toHaveText(/^-?₦[\d,]+\.\d{2}$/)
+  return textToKobo((await figure.textContent()) ?? '')
+}
+
+/** "₦9,358,768.49" → 935876849. Only for amounts the app formatted, which always carry two decimals. */
+function textToKobo(text: string): number {
+  const digits = Number(text.replace(/[^\d]/g, ''))
+  return text.trim().startsWith('-') ? -digits : digits
+}

@@ -105,28 +105,44 @@ maintenance and catches nothing.
 
 ## Implementation notes (Phase 8)
 
-- **Where:** `e2e/send-money.spec.ts` and `e2e/support.ts`; `playwright.config.ts` runs a production build through
-  `vite preview`, with a `desktop` (1440×900) and a `mobile` (360×800, touch) project. Each test has a fresh browser
-  context, so fresh localStorage and a mock starting from the seed.
-- **Money is asserted against the mock's ledger**, fetched inside the page by idempotency key (captured from the POST's
-  header) and in kobo, as this ADR asked — not only against text on screen.
-- **Failures are forced through the Mock API panel or `window.novabizChaos`.** Flow 3 uses the panel, as a reviewer would.
-  To see *Awaiting confirmation* before reconciliation resolves it (about a second after the 15s timeout), the test raises
-  the mock's latency once the POST is on its way.
+- **Where:** `e2e/send-money.spec.ts` and `e2e/support.ts`; `playwright.config.ts` runs a fresh production build through
+  `vite preview` (never a server left running, which would test old code), with a `desktop` (1440×900) and a `mobile`
+  (360×800, touch) project, and no retries. Each test has a fresh browser context, so a mock starting from the seed.
+  9 tests × 2 sizes = 18 runs: 16 pass, 2 skipped by design (flow 4 on mobile, the drawer test on desktop).
+- **Two kinds of money assertion.** The mock's ledger (fetched in the page, by idempotency key, in kobo) proves what the
+  server recorded; the server's available balance moving by exactly one amount proves no second transfer under *any* key.
+  Where the app changes money optimistically, the test also reads the **balance shown on screen**
+  (`data-testid="available-balance"`), because the server's figure cannot show the app putting its own display back.
+- **Failures are forced through the Mock API panel or `window.novabizChaos`.** Flow 3 uses the panel. To see an unknown
+  outcome before reconciliation resolves it (about a second after the 15s timeout), tests raise the mock's latency once
+  the POST is on its way — and reset it only after looking, because a reset can reach the mock before it handles the POST.
 - **Flow 2 needs a real `422`.** The form will not send more than the balance it shows, so the test spends almost all of
-  it with a transfer made outside the app; the app's own check passes and the server refuses.
-- **Flow 4 runs at desktop size only** and takes about 2.5 minutes: *Try again* appears only after real reconciliation
-  gives up. The same rule is covered in milliseconds by store tests with shortened timings.
+  it with a transfer made outside the app. Its balance check accepts either the restored figure or a fresh one from the
+  server, and rejects only a figure reduced by the refused amount, so a future refetch-after-refusal does not break it.
+- **Flow 4 runs at desktop size only** with a 5-minute limit: *Try again* appears only after real reconciliation gives up.
+  The same rules are covered in milliseconds by store tests with shortened timings.
 - **Flow 5 and the mock's service worker:** Playwright's offline mode does not stop a service-worker mock from answering,
-  so the test asserts what matters — no reconciliation checks while offline, checking resumes on reconnect, and one ledger
-  entry — rather than failed requests.
-- **Added:** two flows after a reload (a sent transfer is still there; an unconfirmed one is found and settles), and the
-  phone menu's close button.
-- **Proven to catch regressions:** rolling back on every error fails flow 3; skipping the undo after a definite failure
-  fails flow 2; not pausing while offline fails flow 5; a new key on *Try again* fails flow 4; not restoring the mock's
-  saved data fails both reload flows.
-- **Browser:** Playwright's Chromium, or `PLAYWRIGHT_CHANNEL=chrome` for an installed Chrome. Playwright's download failed
-  repeatedly on this network, so the suite was run with the installed Chrome.
+  so the test asserts no reconciliation checks during 5 seconds offline. Without pausing, checks would come within that
+  window by construction — the first gap is under 1s and the next under 2s — not merely by chance.
+
+### Broken on purpose (desktop runs, recorded)
+
+Each change was made to the app, the named test run against a fresh build, and the change reverted.
+
+| Change to the app | Test | Result |
+|---|---|---|
+| Roll back on every error (the naive pattern) | 3 | Failed: the "confirming" receipt never appears |
+| Keep the row after a timeout but put the shown balance back | 3 | Failed: shown balance 935,972,449 kobo, expected 935,872,399. *The earlier version of this test passed this change.* |
+| No optimistic row | 1 | Failed: no *Pending* row. *The earlier version passed this change.* |
+| Do not undo after a refusal | 2 | Failed: the refused row is still on the page |
+| Do not pause checks while offline | 5 | Failed: the transfer resolved while offline, so the receipt changed |
+| A silent second send under a new key after a timeout | 5 | Failed: server balance moved twice |
+| — same change | reload flow 7 | **Passed.** The reload cancels the second send before the slowed mock handles it. Flow 5 is the guard for this. |
+| Do not restore the mock's saved data | 6 and 7 | Both failed |
+| A new key on *Try again* (run in Phase 8's first pass) | 4 | Failed: the two POSTs carried different keys |
+
+- **Browser:** Playwright's Chromium, or `PLAYWRIGHT_CHANNEL=chrome` for an installed Chrome. Playwright's download stalled
+  on this network, so these runs used the installed Chrome.
 
 ## Consequences
 

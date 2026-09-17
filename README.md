@@ -20,7 +20,7 @@ view of money coming into the wallet, and a way to send money out. Built for the
 | 5 | Send Money wizard — account lookup, recent recipients, optimistic send, settlement tracking | ◐ Built and tested; not yet reviewed |
 | 6 | Reconciling transfers whose outcome is unknown | ◐ Built and tested; not yet reviewed |
 | 7 | Offline handling, retry, dark mode | Not started |
-| 8 | Component + Playwright E2E tests | ✅ Done: 684 unit and component tests; 8 Playwright flows at 360px and 1440px |
+| 8 | Component + Playwright E2E tests | ◐ Built and tested; not yet reviewed (684 unit and component tests; 9 Playwright tests at 360px and 1440px) |
 | 9 | Docs, accessibility pass, polish | Not started |
 
 ## Running it
@@ -59,20 +59,25 @@ npm run e2e:headed -- -g "3 ⭐"    # one test, by part of its name
 npm run e2e:debug -- -g "3 ⭐"     # pause before each step, at desktop size
 ```
 
-**What the Playwright suite covers** (`e2e/send-money.spec.ts`), asserting money against the mock's ledger by idempotency
-key, not only the screen:
-1. Happy path: ₦1,000.50 sent, settles, balance moves by exactly 100,050 kobo.
-2. Definite failure: the server refuses; the row is removed, the balance restored, the failure announced.
-3. **Timeout on a transfer the server recorded:** the row reads *Awaiting confirmation*, is not removed, reconciliation
-   resolves it, and the ledger holds it exactly once.
-4. *Try again* after an unconfirmed transfer sends the same key and creates one transfer (desktop only; waits out about
-   two minutes of real reconciliation).
-5. Offline mid-send: checking pauses without a connection, resumes on reconnect, no duplicate.
-6. No page scrolls sideways; the phone menu closes with its close button.
-7. After a reload: a sent transfer is still there, and an unconfirmed one is found and settles.
+**What the Playwright suite covers** (`e2e/send-money.spec.ts`): 9 tests, each run at 360px and 1440px (18 runs; 16 pass,
+2 are skipped by design). Money is asserted against the mock's ledger — by idempotency key, in kobo — and, where the app
+changes it optimistically, against the balance shown on screen:
+1. **Happy path:** ₦1,000.50 appears at once as a *Pending* row with the optimistic reference, settles, and the server's
+   balance moves by exactly 100,050 kobo.
+2. **Definite failure:** the server refuses; the row is removed, the page's count is back where it was, the failure is
+   announced, and the shown balance is not left reduced.
+3. **Timeout on a transfer the server recorded:** while unknown, the shown balance stays reduced and the row reads
+   *Awaiting confirmation*; reconciliation resolves it; the ledger holds it once and the server's balance moved once.
+4. ***Try again*** after an unconfirmed transfer sends the same key; one transfer, and the balance moved once. Desktop only:
+   it waits out about two minutes of real reconciliation.
+5. **Offline mid-send:** no checks while offline, checking resumes on reconnect, the balance moved once.
+6. **After a reload:** a sent transfer and the balance are still there.
+7. **After a reload:** an unconfirmed transfer is found and settles, once.
+8. **No page scrolls sideways.**
+9. **The phone menu closes with its close button** (360px only).
 
-Each flow was checked to fail when the behaviour it protects is broken (for example, rolling back on every error fails
-flow 3, and a new key on *Try again* fails flow 4).
+Which regressions each test was seen to catch — and one it did not — is recorded in
+[ADR-0011](docs/adr/ADR-0011-testing.md).
 
 ## Trying the failure modes
 

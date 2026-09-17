@@ -77,7 +77,8 @@ export function BalanceOverview() {
               <BalanceError error={error} onRetry={() => void refresh()} retrying={isFetching} />
             ) : (
               <>
-                <p className="mt-1 text-[2rem] leading-tight font-semibold tracking-tight tabular-nums sm:text-[2.5rem]">
+                {/* The end-to-end tests read the shown balance here, to check what the app displays, not the server. */}
+                <p data-testid="available-balance" className="mt-1 text-[2rem] leading-tight font-semibold tracking-tight tabular-nums sm:text-[2.5rem]">
                   {hidden ? (
                     <>
                       <span aria-hidden="true">₦ {HIDDEN}</span>

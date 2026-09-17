@@ -19,7 +19,8 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
-  retries: process.env.CI ? 1 : 0,
+  // No retries: a flow that passes only on a second try is a finding, not a pass.
+  retries: 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: `http://localhost:${PORT}`,
@@ -33,7 +34,9 @@ export default defineConfig({
   webServer: {
     command: `npm run build && npx vite preview --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,
-    reuseExistingServer: !process.env.CI,
+    // Always a fresh build: reusing a preview left running would test old code, and a check that breaks the code on
+    // purpose would then wrongly pass.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 })

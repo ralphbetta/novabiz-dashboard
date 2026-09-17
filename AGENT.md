@@ -286,6 +286,8 @@ here. If you are about to produce one, produce the alternative instead.
 | A retry that assumes the first attempt's optimistic change is still cached | A released reconnect refetch may have replaced it. Add the row where missing and refetch the balance. |
 | Saving the mock database without checking for a reset in progress | A scheduled or late save writes the old data back. Save through `createMockPersistence`. |
 | An E2E test that needs an unknown outcome to last, but lets reconciliation find it first | It resolves about a second after the timeout. Raise the mock's latency once the POST is on its way (see `e2e/send-money.spec.ts`). |
+| An E2E money check that only reads the mock's balance | The app changes the *shown* balance optimistically; the server's figure cannot catch the app putting it back. Read `shownAvailableKobo` too. |
+| Checking "no duplicate" by idempotency key alone | A second send carries a new key. Also check the server's balance moved by exactly one amount. |
 | Treating Playwright offline mode as "the mock is unreachable" | The mock runs in a service worker and still answers. Offline tests assert that reconciliation *pauses*, not that requests fail. |
 | A module-level flag for "first render" | Breaks under StrictMode and across tests. Use a per-instance `useRef`. |
 
