@@ -22,12 +22,16 @@
   --nb-fg-muted: #4a5568;
   --nb-border: #e1e6ee;
   --nb-border-strong: #6b7688;
-  /* Resting border for controls: a light tint. Controls stay identifiable by their dark text and chevrons; the
-     border darkens to border-strong on hover, and focus and open states use the accent. */
+  /* Resting border for buttons and dropdowns: a light tint, below 3:1. Allowed only where the control always shows
+     text (a label, or a current value and chevron), which identifies it; it darkens to border-strong on hover. */
   --nb-border-control: #d3dae4;
+  /* Border for text and date inputs, at 3:1 or more: an empty field has nothing else to show it is there. */
+  --nb-border-field: #878f9c;
   --nb-accent: #1f4fd1;
   --nb-accent-fg: #ffffff;
   --nb-focus: #1f4fd1;
+  /* The default focus colour is 2.3:1 on the brand blue; `surface-brand` swaps this one in. */
+  --nb-focus-on-brand: #86a8ff;
 
   --nb-brand: #0b2447;
   --nb-brand-raised: #16355f;
@@ -55,9 +59,11 @@
   --nb-border: #243149;
   --nb-border-strong: #7d8aa0;
   --nb-border-control: #2e3b54;
+  --nb-border-field: #5f6d86;
   --nb-accent: #86a8ff;
   --nb-accent-fg: #0a1120;
   --nb-focus: #86a8ff;
+  --nb-focus-on-brand: #86a8ff;
 
   --nb-brand: #13294b;
   --nb-brand-raised: #1d3862;
@@ -86,6 +92,7 @@
   --color-border: var(--nb-border);
   --color-border-strong: var(--nb-border-strong);
   --color-border-control: var(--nb-border-control);
+  --color-border-field: var(--nb-border-field);
   --color-accent: var(--nb-accent);
   --color-accent-fg: var(--nb-accent-fg);
   --color-focus: var(--nb-focus);
@@ -105,6 +112,15 @@
 
   /* System fonts: no web-font download for merchants on metered data. */
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+}
+
+/*
+ * The brand-blue surfaces (sidebar, drawer, balance card). Use this instead of `bg-brand`: it also switches the focus
+ * outline, inherited by everything inside, to a colour visible on the brand blue. tokens.test.ts enforces both.
+ */
+@utility surface-brand {
+  background-color: var(--nb-brand);
+  --nb-focus: var(--nb-focus-on-brand);
 }
 
 @layer base {

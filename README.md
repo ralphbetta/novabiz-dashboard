@@ -15,8 +15,8 @@ view of money coming into the wallet, and a way to send money out. Built for the
 | 0 | Scaffold, strict TypeScript, lint guards, test runner | ◐ Partly done |
 | 1 | Money module — kobo integers, formatting, parsing | ✅ Done |
 | 2 | MSW mock API — seeded ledger, pagination, idempotency, chaos controls | ◐ Mock API complete; chaos panel UI, saved settings and "Mock API" badge pending (need the Phase 3 store) |
-| 3 | Data layer — Redux Toolkit store, RTK Query endpoints | ◐ Built and tested; not yet used by a screen |
-| 4 | Balance summary + virtualised transaction feed | Not started |
+| 3 | Data layer — Redux Toolkit store, RTK Query endpoints | ✅ Done; used by the dashboard screens |
+| 4 | Dashboard layout, balance summary, paginated transactions table | ✅ Done |
 | 5 | Send Money wizard | Not started |
 | 6 | Optimistic update reconciliation | Not started |
 | 7 | Offline handling, retry, dark mode | Not started |
@@ -32,8 +32,8 @@ npm install
 npm run dev         # Vite dev server
 ```
 
-**At this stage `npm run dev` serves the Vite starter page.** No dashboard UI exists yet; it starts
-in Phase 4. The mock API now starts automatically with the dev server — no second process — and also
+Open http://localhost:5173 — it redirects to `/dashboard`. The routes are `/dashboard` (overview),
+`/dashboard/transactions` and `/dashboard/send-money` (a placeholder until Phase 5). The mock API now starts automatically with the dev server — no second process — and also
 in production builds, since there is no real backend
 ([ADR-0005](docs/adr/ADR-0005-mock-api.md)). Because it runs as a service worker, the app must be
 served from `localhost` or over HTTPS: opening the dev server from a phone via a LAN IP will not work.
@@ -91,6 +91,40 @@ boundary to the moment of display; a decimal exists only inside the formatter. F
 The agreement test found a real bug. The first fallback was one kobo out above ~₦10 trillion, and
 no hand-written case had used an amount that large.
 
+### Dashboard UI — [src/app](src/app), [src/features](src/features)
+
+- **One layout route** with a sidebar (a native `<dialog>` drawer below 1024px) and a sticky top bar. Navigating
+  moves focus to the page heading and updates the tab title.
+- **Overview**: balance card with hide-amounts and refresh, money in and out today, and the six latest transactions.
+- **Transactions**: a full-width table filtered by direction, status and date (sent to the server), paginated with
+  25–1,000 rows per page. The body is virtualised, so a 1,000-row page keeps about 20 rows in the DOM. Every
+  request shows a loading, empty (new merchant vs. no filter matches) or error-with-retry state, and page changes
+  are announced to screen readers. → [ADR-0016](docs/adr/ADR-0016-paginated-transactions-table.md)
+- **Dropdowns** are one custom `Select` built to the WAI-ARIA combobox pattern, with full keyboard support.
+  → [ADR-0017](docs/adr/ADR-0017-custom-select-and-native-dialog.md)
+- **Styling**: Tailwind v4 with colour tokens for light and dark in [src/styles/index.css](src/styles/index.css).
+  There is no theme toggle yet (Phase 7).
+
+**Tests:** component tests with Testing Library and axe for the balance card (loading, error and retry, hide
+amounts, refresh announcements), pagination controls and range, recent transactions (loading, empty, error), `Select`,
+the transactions section (focus and announcements on page, filter and page-size changes), the announcer and route
+focus. A contrast test ([src/styles/tokens.test.ts](src/styles/tokens.test.ts)) checks hand-listed colour pairs in
+light and dark, and uses the CSS Tailwind generates to confirm every colour in use is in a checked pair. It found a
+focus outline too faint on the dark blue sidebar, now fixed. It does not work out which colours actually overlap; that
+needs a rendered page.
+
+**Performance, measured** on the production build in desktop Chrome, with mock latency set to 0 so the numbers are
+the app's own work (one run each, on a MacBook; not a real phone):
+
+| | Switch to 1,000 rows per page | Rows in the DOM | Scrolling the full 1,000-row page for 3s |
+|---|---|---|---|
+| 1440px | 180 ms | 23 | 181 frames (60 fps), worst frame 17 ms, no long tasks |
+| 360px, CPU throttled 6× | 280 ms, long tasks of 73 and 104 ms | 21 | 173 frames (~58 fps), worst frame 50 ms, one 57 ms long task |
+
+The switch includes the mock service worker building and validating the 1,000-row response. Measured with a
+Playwright script using Chrome's CPU throttling and `PerformanceObserver`, not the React DevTools Profiler, which
+cannot run headless. Not yet confirmed on a real low-end Android phone.
+
 ### Lint guards — [eslint.config.js](eslint.config.js)
 
 The branded type cannot stop `{amount / 100}` in a component, because a `Kobo` is still a number.
@@ -107,8 +141,8 @@ into claiming otherwise.
 
 Recorded as ADRs. Each item says whether it is built.
 
-**State and data fetching: Redux Toolkit with RTK Query** *(built — `src/api`, `src/store`; no screen uses
-it yet)*. Almost all state here is a cached copy
+**State and data fetching: Redux Toolkit with RTK Query** *(built — `src/api`, `src/store`, used by the
+dashboard screens)*. Almost all state here is a cached copy
 of server data — balance, feed, transfer results — which RTK Query manages: caching, pagination,
 loading and error states, optimistic patches. The little genuinely client-owned state (the Send
 Money draft, theme) lives in plain RTK slices in the same store, so there is one store and one
@@ -116,7 +150,7 @@ DevTools timeline. TanStack Query was the close alternative. →
 [ADR-0003](docs/adr/ADR-0003-server-state.md), [ADR-0004](docs/adr/ADR-0004-client-state.md)
 
 **Mock API: MSW at the network layer** *(built)*. The app makes real HTTP requests and cannot tell it is
-mocked. The same handlers serve the browser, component tests and E2E tests. It will include
+mocked. The same handlers serve the browser, component tests and E2E tests. It includes
 simulated latency, a configurable failure rate, and deterministic "force the next request to fail
 or time out" controls, so error paths can be demonstrated on demand. →
 [ADR-0005](docs/adr/ADR-0005-mock-api.md)
@@ -127,7 +161,16 @@ an `unknown` state that keeps the balance reduced, tells the merchant not to res
 against the server using the idempotency key. →
 [ADR-0006](docs/adr/ADR-0006-optimistic-send.md), [ADR-0007](docs/adr/ADR-0007-idempotency.md)
 
-The full set of 15 decisions is indexed in [docs/adr/](docs/adr/README.md).
+**Transactions: pages, not infinite scroll** *(built)*. Previous, Next and First page controls rather than page
+numbers, because the API pages by cursor and cannot jump to page 17. Rows per page up to 1,000, with a virtualised
+body. Replaced the planned infinite feed at the product owner's request. →
+[ADR-0016](docs/adr/ADR-0016-paginated-transactions-table.md)
+
+**UI primitives: no component library** *(built)*. Tailwind v4, a native `<dialog>` for the mobile drawer and a
+custom accessible `Select`, instead of Radix. →
+[ADR-0010](docs/adr/ADR-0010-styling-responsive.md), [ADR-0017](docs/adr/ADR-0017-custom-select-and-native-dialog.md)
+
+The full set of 17 decisions is indexed in [docs/adr/](docs/adr/README.md).
 
 ## Assumptions
 
@@ -150,8 +193,9 @@ The brief leaves these open; each is a judgement call, recorded so it can be cha
 - **Send Money must reject zero and negatives.** `parseNairaInput` accepts both by design. The
   shared contract (`SendMoneyRequestSchema`) now rejects them with tests; the Phase 5 form must
   surface that error accessibly.
-- The Vite starter assets (`src/App.tsx` demo, `hero.png`, `react.svg`, `vite.svg`) are still present
-  and will be removed when the app shell is built.
+- **Accessibility is checked with axe in component tests, not a lint plugin.** `eslint-plugin-jsx-a11y` does not
+  support ESLint 10. axe in jsdom cannot check colour contrast, so a separate test checks the token pairs.
+- **No route lazy-loading yet.** The main JavaScript chunk is about 176 kB gzipped.
 
 ## Repository layout
 
@@ -165,7 +209,16 @@ src/mocks/db.ts              Mock server state and business rules: ledger, pagin
 src/mocks/handlers.ts        Mock API HTTP layer (MSW)
 src/mocks/chaos.ts           Chaos controls: latency, errors, timeouts, forced outcomes
 src/mocks/browser.ts         Starts the mock as a service worker
-src/**/*.test.ts             Unit, property-based, contract, seed and lint-guard tests
+src/api/                     RTK Query API, base query (timeouts, retries), shared contracts
+src/store/                   Redux store factory and typed hooks
+src/app/                     Router, dashboard layout, sidebar and top bar, route focus
+src/pages/                   One component per route
+src/features/balance/        Balance card and today's totals
+src/features/transactions/   Transactions table, filters, pagination, recent transactions
+src/components/ui/           Button, Icon, Select, Skeleton, StatusBadge
+src/components/feedback/     Screen-reader announcer, loading/empty/error message
+src/styles/index.css         Tailwind v4 entry and colour tokens (light and dark)
+src/**/*.test.ts(x)          Unit, property-based, contract, seed, lint-guard and component tests
 src/source-hygiene.test.ts   Fails on raw invisible, bidirectional or look-alike characters
 docs/adr/                    Architecture Decision Records
 docs/IMPLEMENTATION_PLAN.md  Phased build plan and progress

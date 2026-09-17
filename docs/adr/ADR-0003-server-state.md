@@ -115,7 +115,9 @@ Recorded during Phase 3, where the library behaved differently from what this AD
 - **`extraOptions` is typed as always present but is `undefined` for endpoints that set none.** Guarded.
 - **`keepUnusedDataFor: 0` does not make a query fresh.** It only drops the entry once nothing subscribes; a
   subscribed repeat returns the cache. The reconciliation lookup uses `forceRefetch: () => true`.
-- **An infinite query refetches every cached page by default.** The feed sets `refetchCachedPages: false`.
+- **An infinite query refetches every cached page by default.** The feed set `refetchCachedPages: false`. *(Since
+  replaced: the feed became a paginated table using one ordinary query per page — see ADR-0016 — so only the page on
+  screen refetches.)*
 
 ## How we would know we were wrong
 

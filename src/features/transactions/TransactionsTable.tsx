@@ -10,6 +10,7 @@ import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { Pagination } from './Pagination'
 import type { PageSize } from './pageSize'
+import { pageRange } from './pageRange'
 import { TransactionRow } from './TransactionRow'
 
 const ROW_HEIGHT_NARROW = 72
@@ -59,8 +60,9 @@ export function TransactionsTable({
   const rowHeight = isWide ? ROW_HEIGHT_WIDE : ROW_HEIGHT_NARROW
 
   const rows = currentData?.items ?? []
-  // While a new page loads, keep the footer's totals from the last page seen, so it does not jump.
-  const totalCount = (currentData ?? data)?.totalCount ?? 0
+  // While a new page loads, keep the footer's figures from the last page seen, so it does not jump.
+  const shown = currentData ?? data
+  const totalCount = shown?.totalCount ?? 0
   const now = new Date()
 
   const tableTop = useRef<HTMLDivElement>(null)
@@ -103,11 +105,12 @@ export function TransactionsTable({
     const isInitial = lastAnnouncedRef.current === null
     lastAnnouncedRef.current = key
     if (isInitial) return
-    const first = pageIndex * pageSize + 1
-    const last = pageIndex * pageSize + currentData.items.length
-    announce(currentData.totalCount === 0
+    const { first, last, total } = pageRange({
+      pageIndex, pageSize, itemCount: currentData.items.length, totalCount: currentData.totalCount, hasNext: Boolean(currentData.nextCursor),
+    })
+    announce(currentData.items.length === 0
       ? 'No transactions found'
-      : `Showing ${formatCount(first)} to ${formatCount(last)} of ${formatCount(currentData.totalCount)} transactions`)
+      : `Showing ${formatCount(first)} to ${formatCount(last)} of ${formatCount(total)} transactions`)
   }, [currentData, pageIndex, pageSize, filters, announce, lastAnnouncedRef])
 
   let body
@@ -187,6 +190,7 @@ export function TransactionsTable({
         <Pagination
           pageIndex={pageIndex}
           pageSize={pageSize}
+          itemCount={shown?.items.length ?? 0}
           totalCount={totalCount}
           hasNext={Boolean(currentData?.nextCursor)}
           busy={isFetching}

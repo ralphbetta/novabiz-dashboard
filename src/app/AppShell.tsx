@@ -82,7 +82,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
         Skip to content
       </a>
 
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 bg-brand lg:block">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 surface-brand lg:block">
         <SidebarContent />
       </aside>
 
@@ -90,7 +90,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
         ref={drawer}
         aria-label="Main menu"
         onClick={(e) => { if (e.target === e.currentTarget) closeDrawer() }}
-        className="m-0 h-dvh max-h-none w-72 max-w-[85vw] bg-brand p-0 backdrop:bg-fg/50 lg:hidden"
+        className="m-0 h-dvh max-h-none w-72 max-w-[85vw] surface-brand p-0 backdrop:bg-fg/50 lg:hidden"
       >
         {/* The close button lives in the brand row. An earlier layout pulled the content up over a separate close
             row with a negative margin, and its transparent box covered most of the button, so taps missed it. */}
@@ -112,7 +112,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
                   <span className="block text-sm font-semibold text-fg">{MERCHANT.name}</span>
                   <span className="block text-xs text-fg-muted">Merchant</span>
                 </span>
-                <span aria-hidden="true" className="grid size-9 place-items-center rounded-full bg-brand text-xs font-semibold text-brand-fg">
+                <span aria-hidden="true" className="grid size-9 place-items-center rounded-full surface-brand text-xs font-semibold text-brand-fg">
                   {MERCHANT.initials}
                 </span>
               </div>

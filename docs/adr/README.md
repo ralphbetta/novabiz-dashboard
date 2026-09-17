@@ -41,14 +41,16 @@ reversed later we don't edit the old record — we write a new one that supersed
 | 0005 | Mock API | [ADR](ADR-0005-mock-api.md) | [plain](ADR-0005-mock-api.dummies.md) | ⭐⭐ | Accepted |
 | 0006 | **Optimistic send & reconciliation** | [ADR](ADR-0006-optimistic-send.md) | [plain](ADR-0006-optimistic-send.dummies.md) | ⭐⭐⭐ | Accepted |
 | 0007 | **Idempotency** | [ADR](ADR-0007-idempotency.md) | [plain](ADR-0007-idempotency.dummies.md) | ⭐⭐⭐ | Accepted |
-| 0008 | Transaction feed | [ADR](ADR-0008-transaction-feed.md) | [plain](ADR-0008-transaction-feed.dummies.md) | ⭐⭐ | Accepted |
+| 0008 | Transaction feed | [ADR](ADR-0008-transaction-feed.md) | [plain](ADR-0008-transaction-feed.dummies.md) | ⭐⭐ | Partly superseded by 0016 |
 | 0009 | Send Money form | [ADR](ADR-0009-send-money-form.md) | [plain](ADR-0009-send-money-form.dummies.md) | ⭐ | Accepted |
-| 0010 | Styling & responsiveness | [ADR](ADR-0010-styling-responsive.md) | [plain](ADR-0010-styling-responsive.dummies.md) | ⭐ | Accepted |
+| 0010 | Styling & responsiveness | [ADR](ADR-0010-styling-responsive.md) | [plain](ADR-0010-styling-responsive.dummies.md) | ⭐ | Accepted; Radix superseded by 0017 |
 | 0011 | Testing strategy | [ADR](ADR-0011-testing.md) | [plain](ADR-0011-testing.dummies.md) | ⭐⭐ | Accepted |
 | 0012 | Accessibility | [ADR](ADR-0012-accessibility.md) | [plain](ADR-0012-accessibility.dummies.md) | ⭐ | Accepted |
 | 0013 | Input sanitisation | [ADR](ADR-0013-input-sanitisation.md) | [plain](ADR-0013-input-sanitisation.dummies.md) | ⭐⭐ | Accepted |
 | 0014 | Offline & retry | [ADR](ADR-0014-offline-retry.md) | [plain](ADR-0014-offline-retry.dummies.md) | ⭐ | Accepted |
 | 0015 | Scope cuts | [ADR](ADR-0015-scope-cuts.md) | [plain](ADR-0015-scope-cuts.dummies.md) | ⭐ | Accepted |
+| 0016 | **Paginated transactions table** | [ADR](ADR-0016-paginated-transactions-table.md) | [plain](ADR-0016-paginated-transactions-table.dummies.md) | ⭐⭐ | Accepted |
+| 0017 | Custom Select and native dialog | [ADR](ADR-0017-custom-select-and-native-dialog.md) | [plain](ADR-0017-custom-select-and-native-dialog.dummies.md) | ⭐ | Accepted |
 
 ## Reading order
 

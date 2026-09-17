@@ -73,7 +73,8 @@ exactly the moment there is no time to fix structural ones.
 
 **A component library with accessibility built in.** Rejected in ADR 0010 for the dashboard
 as a whole; adopted narrowly via Radix primitives for the dialog and select, where the correct
-behaviour is intricate and well-solved.
+behaviour is intricate and well-solved. *(Superseded by ADR-0017: a native `<dialog>` and a custom `Select` built to the
+WAI-ARIA combobox pattern, with its keyboard and axe behaviour tested.)*
 
 ## Consequences
 

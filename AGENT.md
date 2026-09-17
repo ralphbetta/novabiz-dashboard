@@ -192,8 +192,11 @@ npm run lint        # ESLint, incl. the money and dangerouslySetInnerHTML guards
 npm run typecheck   # tsc
 ```
 
-Not yet wired — do not assume these exist: `npm run e2e` (Playwright, Phase 8), MSW in
-`npm run dev` (Phase 2), `eslint-plugin-jsx-a11y` (Phase 4).
+Also: `npm run build`. The MSW mock starts with `npm run dev` automatically.
+
+Not yet wired — do not assume these exist: `npm run e2e` (Playwright, Phase 8). There is no
+`eslint-plugin-jsx-a11y` (it does not support ESLint 10); accessibility is checked with axe in component tests
+(`src/test/axe.ts`).
 
 Before proposing a change as complete, run `npm run lint && npm run typecheck && npm test`.
 Report what those commands actually printed.
@@ -243,6 +246,21 @@ here. If you are about to produce one, produce the alternative instead.
 | `type="number"` for the amount field | Bad Android keypad, accepts `1e5`, scroll-wheel changes. → `docs/adr/ADR-0009-send-money-form.md` |
 | Adding MUI/Chakra "to move faster" | Deliberately rejected. → `docs/adr/ADR-0010-styling-responsive.md` |
 | Persisting the transfer draft to `localStorage` | Leaves an account number on a shared device. → `docs/adr/ADR-0004-client-state.md` |
+| Adding Radix, Headless UI or a `<select>` for a dropdown | Dropdowns use `src/components/ui/Select.tsx`; overlays use native `<dialog>`. → `docs/adr/ADR-0017-custom-select-and-native-dialog.md` |
+| Infinite scroll or a *Load more* button for the transactions table | The table is paginated with rows per page. → `docs/adr/ADR-0016-paginated-transactions-table.md` |
+| Creating `tailwind.config.js` or a PostCSS config | Tailwind v4: the `@tailwindcss/vite` plugin and `@import "tailwindcss"`. Tokens live in `src/styles/index.css`. |
+| Changing a `Button`'s colour through `className` | In Tailwind v4 it does not reliably override the variant's colour. Add or use a variant. |
+| Removing `'use no memo'` from `TransactionsTable` | The React Compiler memoises the virtualizer's output and rows go blank after scrolling. |
+| An `<Icon>` in a flex row without `shrink-0` | It shrinks to nothing. `Icon` adds `shrink-0` itself; keep it. |
+| `not-sr-only` on an element that has its own padding | It resets padding. Put the padding on an inner element. |
+| Changing a `key` to reset a component that contains a focused control or an announcement ref | The remount drops focus and the ref. Reset state in place, or keep the ref in the parent. |
+| `bg-brand` on an element | The default focus outline is invisible on it. Use the `surface-brand` utility; `tokens.test.ts` fails otherwise. |
+| Detecting "request finished" by watching `isFetching` go true → false | RTK batches the pending update, so a fast response may never render `true`. Await the `refetch()` / trigger result. |
+| Relying on `disabled={isFetching}` to stop a double submit or refresh | Same batching: the button can still be enabled for a second quick click. Guard with a ref set before the request. |
+| Announcing after an `await` without checking the component is still mounted | The announcer outlives the page, so the merchant hears about a page they left. |
+| `border-border-control` on an input | Below 3:1, and an empty input has no text to identify it. Inputs use `border-border-field`; `tokens.test.ts` enforces it. |
+| Computing a page's last row as `(page + 1) × size` | Pages are a cursor walk; the last page can be short even when the total grew. Use `pageRange`. |
+| A module-level flag for "first render" | Breaks under StrictMode and across tests. Use a per-instance `useRef`. |
 
 ---
 

@@ -21,17 +21,26 @@ export function BalanceOverview() {
   const { data, error, isLoading, isFetching, refetch } = useGetBalanceQuery()
   const [hidden, setHidden] = useState(false)
   const announce = useAnnounce()
-  const refreshRequested = useRef(false)
-
+  // Both refs change without waiting for a render. `disabled={isFetching}` alone cannot stop a second quick click:
+  // RTK batches the pending update, so the button can still be enabled when the second click lands.
+  const refreshing = useRef(false)
+  const mounted = useRef(false)
   useEffect(() => {
-    if (!refreshRequested.current || isFetching) return
-    refreshRequested.current = false
-    announce(error ? 'Balance could not be updated' : 'Balance updated')
-  }, [isFetching, error, announce])
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
 
-  const refresh = () => {
-    refreshRequested.current = true
-    void refetch()
+  // Announce from the refetch's own result. Watching `isFetching` for a true → false edge can miss a fast response,
+  // for the same batching reason. Nothing is announced once the merchant has left the page: the announcer outlives it.
+  const refresh = async () => {
+    if (refreshing.current) return
+    refreshing.current = true
+    try {
+      const result = await refetch()
+      if (mounted.current) announce(result.error ? 'Balance could not be updated' : 'Balance updated')
+    } finally {
+      refreshing.current = false
+    }
   }
 
   const onHold = data ? subtractKobo(data.ledgerBalanceKobo, data.availableBalanceKobo) : null
@@ -40,7 +49,7 @@ export function BalanceOverview() {
     <section aria-labelledby="overview-heading" aria-busy={isLoading}>
       <h2 id="overview-heading" className="sr-only">Account overview</h2>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
-        <div className="relative overflow-hidden sm:col-span-2 rounded-3xl bg-brand p-5 text-brand-fg sm:p-6">
+        <div className="relative overflow-hidden sm:col-span-2 rounded-3xl surface-brand p-5 text-brand-fg sm:p-6">
           <span aria-hidden="true" className="pointer-events-none absolute -top-16 -right-12 size-48 rounded-full bg-brand-raised" />
           <div className="relative">
             <div className="flex items-start justify-between gap-3">
@@ -52,7 +61,7 @@ export function BalanceOverview() {
                 <IconButton label={hidden ? 'Show amounts' : 'Hide amounts'} aria-pressed={hidden} onClick={() => setHidden((h) => !h)} variant="ghost-on-brand">
                   <Icon name={hidden ? 'eye-off' : 'eye'} />
                 </IconButton>
-                <IconButton label="Refresh balance" onClick={refresh} disabled={isFetching} variant="ghost-on-brand">
+                <IconButton label="Refresh balance" onClick={() => void refresh()} disabled={isFetching} variant="ghost-on-brand">
                   <Icon name="refresh" className={`size-5 ${isFetching ? 'animate-spin' : ''}`} />
                 </IconButton>
               </div>
@@ -65,7 +74,7 @@ export function BalanceOverview() {
                 <Skeleton className="mt-3 h-4 w-44 bg-brand-raised" />
               </div>
             ) : !data ? (
-              <BalanceError error={error} onRetry={refresh} retrying={isFetching} />
+              <BalanceError error={error} onRetry={() => void refresh()} retrying={isFetching} />
             ) : (
               <>
                 <p className="mt-1 text-[2rem] leading-tight font-semibold tracking-tight tabular-nums sm:text-[2.5rem]">

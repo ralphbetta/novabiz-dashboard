@@ -1,5 +1,9 @@
 # ADR-0008 in plain English — Transaction feed
 
+> **Heads up: partly replaced.** The infinite scroll and "Load more" button described here became a normal paginated
+> table, with rows per page up to 1,000. See **[ADR-0016](ADR-0016-paginated-transactions-table.dummies.md)**. The ideas
+> about filtering on the server and only drawing the rows you can see still apply.
+
 > Plain-language companion to **[ADR-0008](ADR-0008-transaction-feed.md)**. Same decision, no jargon.
 > **Interview weight: ⭐⭐ high** — "performance at 1,000+ rows" is a named grading criterion.
 

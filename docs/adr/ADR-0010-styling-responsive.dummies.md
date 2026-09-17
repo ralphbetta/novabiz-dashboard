@@ -39,6 +39,8 @@ two reasons: the panel is grading my component boundaries and my accessibility w
 library answers both *on my behalf*. And it ships a large bundle to people I've specifically
 decided to be careful with.
 
+*(Changed since: no Radix — see [ADR-0017](ADR-0017-custom-select-and-native-dialog.dummies.md). The plan below is what I first intended.)*
+
 I did use **Radix primitives** (unstyled) for the dialog and select — focus-trapping and
 typeahead are genuinely hard to hand-roll and aren't what's being assessed.
 

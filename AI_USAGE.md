@@ -281,6 +281,26 @@ transaction row could show the same amount differently.
   the layout bug by probing which element sat under the button in real Chrome — and each fix was then broken on
   purpose to check the test caught it. Two browser probes the model wrote along the way gave false alarms from
   reading the page too early; both were traced to probe timing before any code was changed.
+- **Two more bugs found by writing the missing Phase 4 tests.** The contrast test showed that the focus outline the
+  model had chosen was 2.3:1 on the dark blue sidebar and balance card, below WCAG's 3:1, in light mode. Neither axe
+  (it cannot measure contrast in jsdom) nor the screenshots showed it. **Fix:** brand surfaces use a `surface-brand`
+  utility that switches the outline to a lighter blue; the test also fails the build if a bare `bg-brand` returns.
+  Separately, the balance card's "Balance updated" announcement was never made when the response was fast: it waited
+  for a render showing `isFetching: true`, and RTK batches that update, so a quick reply skipped it. The first
+  component test for Refresh failed on this; logging showed the request was sent but no such render happened. It now
+  announces from the result of `refetch()`. Both fixes were broken on purpose afterwards to check the tests caught
+  them. Checking the outline in real Chrome, the first reading looked wrong, but the cause was measuring during the
+  links' colour transition, not the fix.
+- **Tests that locked in bugs, and docs that overstated them.** A review of the previous item found that the new
+  Pagination test pinned wrong arithmetic (the last row assumed a full page, so the footer could disagree with the
+  announcement after new transactions arrived); the contrast exception for tinted borders also covered the date
+  inputs, where no text identifies an empty field; the Refresh fix still announced twice on a double click and after
+  leaving the page; the brand-colour guard only read source text; and the hide-amounts check missed amounts under
+  ₦1,000 and the on-hold amount. The docs also claimed an untested screen-reader result, a focus trap "in every
+  browser" despite a fallback without one, and "numbered pages" where the code deliberately has none. Each code
+  finding was confirmed by a failing test before the fix, and each fix was broken on purpose afterwards. One new test
+  first failed for the wrong reason (the first ArrowDown only opens the dropdown), which was corrected before it
+  counted.
 - **A stale code sample.** The implementation plan's Phase 1 section still held the buggy fallback
   from §3.1 after the source was fixed. The sample was removed and replaced with links to the real
   files.

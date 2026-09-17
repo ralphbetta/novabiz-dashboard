@@ -3,6 +3,7 @@ import { Button } from '../../components/ui/Button'
 import { Icon } from '../../components/ui/Icon'
 import { Select } from '../../components/ui/Select'
 import { PAGE_SIZE_OPTIONS, type PageSize } from './pageSize'
+import { pageRange } from './pageRange'
 
 /**
  * The table's footer: rows per page, the range shown, and page controls.
@@ -13,6 +14,7 @@ import { PAGE_SIZE_OPTIONS, type PageSize } from './pageSize'
 export function Pagination({
   pageIndex,
   pageSize,
+  itemCount,
   totalCount,
   hasNext,
   busy,
@@ -23,6 +25,8 @@ export function Pagination({
 }: {
   pageIndex: number
   pageSize: PageSize
+  /** Rows on the page being shown. */
+  itemCount: number
   totalCount: number
   hasNext: boolean
   busy: boolean
@@ -31,9 +35,7 @@ export function Pagination({
   onNext: () => void
   onPageSizeChange: (size: PageSize) => void
 }) {
-  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize))
-  const firstRow = totalCount === 0 ? 0 : pageIndex * pageSize + 1
-  const lastRow = Math.min(totalCount, (pageIndex + 1) * pageSize)
+  const { first: firstRow, last: lastRow, total, pageCount } = pageRange({ pageIndex, pageSize, itemCount, totalCount, hasNext })
   const hasPrevious = pageIndex > 0
 
   return (
@@ -49,7 +51,7 @@ export function Pagination({
           onChange={onPageSizeChange}
         />
         <p className="text-sm text-fg-muted tabular-nums">
-          {formatCount(firstRow)}–{formatCount(lastRow)} of {formatCount(totalCount)}
+          {formatCount(firstRow)}–{formatCount(lastRow)} of {formatCount(total)}
         </p>
       </div>
 

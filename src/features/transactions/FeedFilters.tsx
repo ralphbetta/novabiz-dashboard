@@ -84,7 +84,7 @@ export function FeedFilters({
     onChange({})
   }
 
-  const fieldClass = 'min-h-11 w-full rounded-xl border border-border-control bg-surface text-sm text-fg hover:border-border-strong'
+  const fieldClass = 'min-h-11 w-full rounded-xl border border-border-field bg-surface text-sm text-fg hover:border-border-strong'
   const labelClass = 'mb-1 block text-xs font-medium text-fg-muted'
 
   return (

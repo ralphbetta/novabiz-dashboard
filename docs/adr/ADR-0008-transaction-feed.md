@@ -1,6 +1,11 @@
 # ADR 0008 — Windowed rendering with a cursor-paginated infinite feed
 
-**Status:** Accepted · **Date:** 2026-09-16
+**Status:** Partly superseded by [ADR-0016](ADR-0016-paginated-transactions-table.md) · **Date:** 2026-09-16
+
+> **Superseded in part.** The infinite-scroll feed, its "Load more" button and its 50-row pages were replaced by a
+> paginated table at the product owner's request (ADR-0016). Still in force from this ADR: server-side filtering with
+> filters as the cache key, the `(createdAt, id)` cursor, virtualisation, and the accessibility of a virtualised list.
+> The text below is left as written at the time, per this index's rule for reversed decisions.
 
 ## Context
 

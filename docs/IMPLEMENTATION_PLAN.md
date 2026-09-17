@@ -27,13 +27,17 @@ explicitly in the assessment table.
 
 ## 1. Target file structure
 
+> **Planned, not actual.** This was the layout before building. The code now uses `src/app` (router, layout,
+> shell), `src/pages`, `src/features/{balance,transactions}` and `src/components/{ui,feedback}`; the README's
+> *Repository layout* is the accurate map. There is no `tailwind.config.ts` (Tailwind v4 is configured in CSS).
+
 ```
 novabiz-merchant-dashboard/
 ├── README.md                      # architecture, decisions, trade-offs, how to run
 ├── AI_USAGE.md                    # required deliverable — keep it as a live log
 ├── AGENT.md                       # working agreement for AI agents in this repo
 ├── docs/
-│   ├── adr/                       # ADR 0001–0015
+│   ├── adr/                       # ADR 0001–0017
 │   ├── INTERVIEW-PREP.md
 │   └── IMPLEMENTATION_PLAN.md
 ├── public/
@@ -113,28 +117,30 @@ npm create vite@latest novabiz-merchant-dashboard -- --template react-ts
 npm i @reduxjs/toolkit react-redux \
       @tanstack/react-virtual \
       react-hook-form zod @hookform/resolvers \
-      react-router-dom clsx \
-      @radix-ui/react-dialog @radix-ui/react-select
+      react-router
 
 # Dev
-npm i -D msw tailwindcss postcss autoprefixer \
+npm i -D msw tailwindcss @tailwindcss/vite \
          vitest @vitest/ui jsdom \
          @testing-library/react @testing-library/user-event @testing-library/jest-dom \
-         jest-axe fast-check \
-         @playwright/test \
-         eslint-plugin-jsx-a11y
+         axe-core fast-check \
+         @playwright/test
 
 npx msw init public/ --save
 
-# RTK 2.8+ is required for build.infiniteQuery (ADR 0008). Verify before Phase 4:
-npm ls @reduxjs/toolkit
-npx tailwindcss init -p
 npx playwright install chromium
 ```
 
 **Single-command requirement:** MSW's worker file lives in `public/` and is committed, so
 `npm install && npm run dev` genuinely works from a clean clone. Add a `postinstall` running
 `msw init` as a belt-and-braces measure.
+
+**As installed, this differs from the original plan:** no Radix (native `<dialog>` and a custom `Select`,
+ADR-0017); no PostCSS, autoprefixer or `tailwind.config` — Tailwind v4 is the `@tailwindcss/vite` plugin plus
+`@import "tailwindcss"` (ADR-0010); `axe-core` directly instead of `jest-axe`; `react-router` 8 instead of
+`react-router-dom`; no `clsx`. `eslint-plugin-jsx-a11y` could not be installed — it does not support ESLint 10 —
+so accessibility is checked by axe in component tests instead. `react-hook-form` and `@hookform/resolvers` are
+not installed yet; that is decided in Phase 5.
 
 **On `@tanstack/react-virtual`:** it is a virtualiser only. It shares a maintainer with TanStack
 Query but has no dependency on it, so it sits alongside RTK Query without conflict. Worth saying
@@ -150,9 +156,10 @@ out loud if a panellist spots the name and assumes two data layers.
 `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`. ESLint `no-restricted-syntax` guards for
 kobo conversion and `dangerouslySetInnerHTML`. Vitest.
 
-**Still to do, when first needed:** Tailwind (Phase 4), RTL + jsdom (Phase 4),
-`eslint-plugin-jsx-a11y` (Phase 4), Playwright with 360px / 1440px projects (Phase 8).
-Replace the Vite template README and remove the demo assets.
+**Done since:** Tailwind v4, RTL + jsdom + axe-core (Phase 4); template README replaced and demo assets removed.
+`eslint-plugin-jsx-a11y` dropped — incompatible with ESLint 10; axe in component tests covers it.
+
+**Still to do:** Playwright with 360px / 1440px projects (Phase 8).
 
 ---
 
@@ -313,13 +320,13 @@ original response with no second ledger entry.
 
 ---
 
-### Phase 3 — Data layer (≈2h) — ◐ built and tested; not yet rendered by any screen
+### Phase 3 — Data layer (≈2h) — ✅ built and tested; rendered by the Phase 4 screens
 
 **Built** (RTK 2.12, react-redux 9.3):
 - [src/api/baseQuery.ts](../src/api/baseQuery.ts) — waits for the data service, 15s timeout, retries reads
   with full-jitter backoff (1s ceiling doubling, 30s cap, 3 retries), never retries 4xx or writes.
-- [src/api/novabizApi.ts](../src/api/novabizApi.ts) — `getBalance`, `getTransactions` (infinite, cursor,
-  server-side filters as the cache key), `sendMoney` (Idempotency-Key header, `maxRetries: 0`),
+- [src/api/novabizApi.ts](../src/api/novabizApi.ts) — `getBalance`, `getTransactions` (cursor pages,
+  server-side filters as the cache key; originally an infinite query, replaced by Previous/Next pages in Phase 4 — ADR-0016), `sendMoney` (Idempotency-Key header, `maxRetries: 0`),
   `getTransferByKey`. Every response parsed against the shared contract.
 - [src/lib/errors.ts](../src/lib/errors.ts) — `isDefiniteFailure` reads `error.rejected`, never the status.
 - [src/store](../src/store) — `makeStore` with the data-service promise as the thunk extra argument; typed hooks.
@@ -352,12 +359,13 @@ store; request gating on service readiness; a contract-violating response.
   `isDefiniteFailure` now treats `REQUEST_NOT_SENT` as definite. ADR-0006's table records it.
 - **Component tests could not have configured the hooks' API.** The `createNovabizApi` factory is gone; timing
   comes from `makeStore({ http })`, so there is one API instance.
-- **A reconnect reloaded every page of a long scroll.** The feed sets `refetchCachedPages: false`.
+- **A reconnect reloaded every page of a long scroll.** The feed set `refetchCachedPages: false`. (Since Phase 4 the
+  feed is paged — ADR-0016 — so only the page on screen is refetched; the test was kept and reworded.)
 - **A read could take over a minute to fail.** Reads now have a 30s overall deadline.
 
 **Not done — deliberately moved:**
-- **The plan's "done when" — a component rendering the real balance — is not met.** No screen uses the data
-  layer yet. Phase 4's BalanceCard is the first, and is where this is verified in a browser.
+- ~~**The plan's "done when" — a component rendering the real balance — is not met.**~~ Met in Phase 4: the
+  balance card renders the real balance, verified in Chrome.
 - **The preferences and transfer-draft slices** are deferred to where each is first needed: preferences with
   the chaos panel and dark mode, the draft with Send Money. Building them now would be state nothing reads.
 - **Retry suppression while offline** (ADR-0014) is Phase 7.
@@ -368,20 +376,68 @@ responses. Input for the open `zod/mini` decision. The mock chunk no longer bloc
 
 ---
 
-### Phase 4 — Balance + feed (≈4h)
+### Phase 4 — Balance + feed (≈4h) — ✅ done
 
-Balance card with loading skeleton / error+retry / data, and today's totals. Feed with
-`useGetTransactionsInfiniteQuery` + `useVirtualizer`, memoised rows, filter bar (date range,
-status, type) with server-side filtering, and all three async states — **including empty-because-filtered**, which
-is a different message from empty-because-new-merchant and is the state people forget.
+**Original plan:** balance card with loading / error+retry / data and today's totals; a feed with
+`useGetTransactionsInfiniteQuery` + `useVirtualizer`, a *Load more* button, server-side filters, and all async
+states including empty-because-filtered.
 
-Accessibility now, not later: `aria-rowcount` / `aria-rowindex`, the polite "50 more loaded"
-announcement, and a real *Load more* button (ADR 0008).
+**What was built instead, and why** (ADR-0016, ADR-0017):
+- **A routed dashboard layout**, at the product owner's request: `/dashboard` (overview), `/dashboard/transactions`
+  and `/dashboard/send-money` inside one layout route with a sidebar (a native `<dialog>` drawer below `lg`) and a
+  sticky top bar. Route changes move focus to the page `h1` and set `document.title`.
+- **A paginated, full-width transactions table** instead of infinite scroll: First/Previous/Next, "1–25 of 1,200",
+  and rows per page of 25, 50, 100, 500 or 1,000. The body is window-virtualised, so a 1,000-row page renders about
+  20 DOM rows. Paging uses a stack of cursors, since the API is keyset-paginated.
+- **Filters** (direction, status, date presets and a custom range) in one toolbar row on desktop, behind a Filters
+  toggle on mobile. Filters are sent to the server and are part of the cache key.
+- **A custom `Select`** built to the WAI-ARIA select-only combobox pattern, used for every dropdown.
+- **The overview**: a balance card (hide amounts, refresh, on hold, last updated), money in / out today, and the six
+  latest transactions.
+- **Hostile seed rows** render as plain text, sanitised by the contract.
 
-Profile with React DevTools. Note the result for the README.
+**Tested:** `Select` keyboard and pointer behaviour (19 tests); `TransactionsSection` — announcements after a
+filter or page-size change and focus kept on the rows-per-page control; `Announcer` per-region timers; route focus;
+`BalanceOverview` (loading, error and retry, hide amounts, refresh announcements, axe); `Pagination` (ranges, empty,
+disabled states, handlers, rows per page, axe); `RecentTransactions` (loading, newest six, link, empty, error, axe);
+colour-token contrast in light and dark ([src/styles/tokens.test.ts](../src/styles/tokens.test.ts)).
 
-**Done when:** 1,200 rows scroll smoothly at 360px, filters work, and the hostile seed rows
-render as harmless text.
+**Found while building:**
+- The React Compiler memoised TanStack Virtual's results, so rows went blank after scrolling. `TransactionsTable`
+  opts out with `'use no memo'`.
+- In Tailwind v4 a colour passed through `className` does not reliably beat the variant's colour; colours now come
+  only from `Button` variants.
+- `not-sr-only` resets padding; icons in flex rows shrank to under a pixel without `shrink-0`.
+
+**Fixed after adversarial review of Phase 4:** the drawer close button was covered by an overlapping element; no
+announcement after a filter or page-size change (the table remounted and lost its "last announced" ref); changing
+rows per page lost focus (the remount unmounted the control); the announcer shared one timer between its polite and
+assertive regions; a module-level "first load" flag broke under StrictMode.
+
+**Found by those tests** (each confirmed failing first, then the fix broken on purpose to check the test caught it):
+- The light-mode focus outline was 2.3:1 on the brand blue. Brand surfaces now use `surface-brand`, which switches it
+  to `focus-on-brand`; verified in Chrome.
+- "Balance updated" was never announced for a fast response: the effect waited for a render with `isFetching: true`,
+  which RTK's batching can skip. It now announces from `refetch()`'s result.
+
+**Fixed after review of those tests and fixes** (each confirmed first by a failing test, then broken on purpose):
+- The footer computed its last row as if every page were full, so after new transactions arrived mid-walk it could
+  disagree with the announcement, and could call a page the last while there was a next one. Both now use
+  `pageRange`, built from the rows actually on the page.
+- The date inputs used the tinted control border (1.41:1), with no text or chevron to identify an empty field. Inputs
+  now use `border-field` (3:1 or more); the tinted border is limited to buttons and dropdowns, which the test enforces.
+- Two quick Refresh clicks announced twice, and a refresh finishing after leaving the page was still announced.
+- The contrast test's brand and focus checks now read the CSS Tailwind generates (catching arbitrary values and `.ts`
+  files), and it checks every colour in use is covered by a pair. The hide-amounts test now covers the on-hold amount
+  and amounts under ₦1,000. Page changes now have a test for focus and the announcement.
+
+**Profiled** (production build, Chrome, mock latency 0; numbers in the README): switching to 1,000 rows per page takes
+180 ms, or 280 ms at 360px with the CPU throttled 6×; scrolling the full page holds about 60 fps with 21–23 rows in the
+DOM. Measured with Chrome's CPU throttling and `PerformanceObserver` in a Playwright script rather than the React
+DevTools Profiler, which cannot run headless. Not checked on a real phone.
+
+**Done when:** 1,200 rows page smoothly at 360px, filters work, and the hostile seed rows render as harmless text.
+Met, with the caveat above about real devices.
 
 ---
 
@@ -452,7 +508,7 @@ persisted via the preferences slice subscriber. Contrast test over the token val
 
 ### Phase 8 — Tests (≈4h)
 
-Component tests per ADR 0011, including the keyboard-only wizard traversal and `jest-axe` on
+Component tests per ADR 0011, including the keyboard-only wizard traversal and axe on
 every screen. Then the six Playwright flows. **Write test 3 (timeout-but-committed) first** —
 it's the one that proves the whole thesis, and if something is wrong you want to find out with
 time left.

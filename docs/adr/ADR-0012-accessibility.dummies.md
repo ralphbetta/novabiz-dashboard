@@ -54,8 +54,9 @@ at a glance. This gives a screen reader user the same chance.
 problems on the last day.
 
 **A component library with a11y built in** — rejected for the app as a whole in
-[ADR-0010](ADR-0010-styling-responsive.dummies.md), but used narrowly via Radix for the dialog
-and select, where the correct behaviour is intricate and well-solved.
+[ADR-0010](ADR-0010-styling-responsive.dummies.md). The first plan still used Radix for the dialog and select, where the
+correct behaviour is intricate. That changed: the app now uses the browser's own dialog and a tested custom dropdown
+instead — see [ADR-0017](ADR-0017-custom-select-and-native-dialog.dummies.md).
 
 ## How I verified it
 
