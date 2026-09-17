@@ -72,7 +72,7 @@ profile.
 - **The preferences slice persists** (theme, and chaos settings so a demo survives a reload). *(Changed when the panel
   was built: the chaos settings stay in the mock's own controller and are saved by the mock — see ADR-0005. Only the theme
   is left for the preferences slice. Built in Phase 7: `src/store/preferencesSlice.ts`, one key, `novabiz.theme`.)* A
-  small `store.subscribe` writing two keys to `localStorage`, not `redux-persist` — for two
+  small `store.subscribe` writing to `localStorage` (as built, one key), not `redux-persist` — for one or two
   fields, a rehydration library is machinery without a payoff.
 - **The transfer draft does not persist.** A half-entered transfer contains a recipient account
   number. That is personal financial data under NDPA 2023, and leaving it in device storage

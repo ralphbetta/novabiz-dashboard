@@ -124,7 +124,8 @@ at the edge. Never put a `Date`, a `Map`, or a class instance in state.
 
 **Invalidation.** Prefer a targeted `updateQueryData` patch over `invalidatesTags`. Users are on
 metered, slow connections — refetching a page of transactions to learn one fact is a real cost.
-The send flow patches and invalidates nothing. Tags are for genuine cross-entity relationships.
+The send flow patches the cache and invalidates only the recent-recipients list (`Beneficiaries`, on success). Tags are
+for genuine cross-entity relationships.
 
 **Components.** Presentational components take data as props and do not fetch. Fetching lives in
 `src/api/*` hooks. A component that both fetches and renders a complex tree should be split.
@@ -152,12 +153,12 @@ explaining the invariant. No `@ts-expect-error` without a linked issue.
 ## Testing expectations
 
 - New logic in `src/lib/` needs unit tests in the same change.
-- Anything touching `money.ts`, `errors.ts`, `idempotency.ts`, or the `sendMoney` endpoint's
+- Anything touching `money.ts`, `errors.ts`, `sendTransfer.ts` (where the idempotency key is made), or the `sendMoney` endpoint's
   `onQueryStarted` needs a test
   demonstrating the failure case, not just the happy path.
 - Component tests run against the **real MSW handlers**, never stubbed modules.
 - No snapshot tests. No tests asserting that a `<div>` rendered.
-- The E2E test `send-money.spec.ts › timeout on a committed transfer` is load-bearing. **If your
+- The E2E test `send-money.spec.ts › 3 ⭐ a timeout on a transfer the server DID record…` is load-bearing. **If your
   change makes it fail, your change is wrong** — do not adjust the test to match the new
   behaviour without reading `docs/adr/ADR-0006-optimistic-send.md` first. → `docs/adr/ADR-0011-testing.md`
 
@@ -198,7 +199,7 @@ Also: `npm run build`. The MSW mock starts with `npm run dev` automatically.
 it one test that waits out real reconciliation. `npm run e2e:desktop` runs one viewport. Set `PLAYWRIGHT_CHANNEL=chrome`
 to use an installed Chrome if Playwright's Chromium is not downloaded. There is no
 `eslint-plugin-jsx-a11y` (it does not support ESLint 10); accessibility is checked with axe in component tests
-(`src/test/axe.ts`).
+(`src/test/axe.ts`, no contrast) and in a real browser with contrast (`e2e/accessibility.spec.ts`).
 
 Before proposing a change as complete, run `npm run lint && npm run typecheck && npm test`.
 Report what those commands actually printed.
@@ -291,6 +292,8 @@ here. If you are about to produce one, produce the alternative instead.
 | Reading RTK Query's `config.online` for the offline banner or Send button | The reconnect guard holds `onOnline` back while a transfer's outcome is open, so it lags the real connection. Use `selectOnline` (`src/store/connectivitySlice.ts`). → ADR-0014 |
 | `disabled` on an action that is unavailable offline | A disabled button cannot be focused, so a keyboard or screen reader user never hears why. Use `aria-disabled` with the reason linked by `aria-describedby`, and refuse in the thunk too. |
 | Queueing a transfer to send when the connection returns | A surprise debit minutes later. Refuse and keep the details; the merchant sends. → ADR-0014 |
+| `React.lazy` for a page route | The heading is not there when `RouteFocus` runs, so focus is lost on navigation. Use the router's `lazy` route property. → ADR-0012 |
+| Editing the loading screen in one place | `index.html` and `src/app/PageLoading.tsx` render the same markup; the styles live only in `index.html`, because they must work before the app's CSS loads. |
 | Reading the theme only in React | The page paints light first. `index.html` applies the saved theme before any script loads. → ADR-0010 |
 | Treating Playwright offline mode as "the mock is unreachable" | The mock runs in a service worker and still answers. Offline tests assert that reconciliation *pauses*, not that requests fail. |
 | A module-level flag for "first render" | Breaks under StrictMode and across tests. Use a per-instance `useRef`. |

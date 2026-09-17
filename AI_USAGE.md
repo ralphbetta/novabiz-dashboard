@@ -348,6 +348,15 @@ transaction row could show the same amount differently.
   added the dark mode icon to the top bar and the offline reason above the Send bar; every test passed. The 360px
   screenshot showed the page title wrapped onto two lines and the reason hidden behind the sticky bar. It also wrote a
   unit test called "not held back by the reconnect guard" that never involved the guard; it was removed.
+- **Phase 9: a suite that passed on its first run, and a layout bug the tests could not see.** The browser accessibility
+  suite reported no violations at once. That proves nothing until it can fail, so contrast, a button label, route focus
+  and focus outlines were each broken on purpose, and each made it fail. Screenshots taken for the README showed the top
+  bar title wrapping at 360px when the Mock API button had a count — no test measured that.
+- **Documentation that drifted from the code over nine phases.** A final check of every claim against the code found
+  about thirty that were stale or overclaimed: a code sample in ADR-0006 showing the pattern later banned in AGENT.md,
+  accessibility features (`aria-required`, reading the amount back in words) described as decided and never built, a
+  test ADR-0013 said existed and did not, a file name that never existed, bundle figures from three phases earlier.
+  Each was corrected or marked not built, and the missing test was written.
 - **A stale code sample.** The implementation plan's Phase 1 section still held the buggy fallback
   from §3.1 after the source was fixed. The sample was removed and replaced with links to the real
   files.
@@ -361,7 +370,8 @@ transaction row could show the same amount differently.
   confirm a test failed. Sign check: 2 failures. Parser grouping: 3. Naive fallback: 2. Removing the
   lint rule: 5.
 - **I made it verify before asserting.** Every npm script listed in the README was run first. Every
-  link was checked. The hard-coded test count was removed, since it would go stale.
+  link was checked. A hard-coded test count was removed from the README at the time, since it would go stale. (Counts were
+  added back later, per phase, and are updated by hand; they can drift.)
 - **I overrode it on decisions that were mine.** State management, and doing the scaffold myself.
 
 ## 5. Assessment

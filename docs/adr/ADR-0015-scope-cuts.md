@@ -26,9 +26,9 @@ These are the graded criteria. They are where the time went.
 
 | Cut | Why |
 |---|---|
-| **Authentication / login** | The brief starts at a signed-in merchant. A fake login screen would consume real time and demonstrate nothing being assessed. A `merchantSlice` seeded with a fixed merchant marks where the session would attach. |
-| **Real routing beyond 3 views** | `react-router` is present for the feed / send / detail views. No nested layouts or route-level code splitting — at this size that is machinery without a payoff. |
-| **Redux persistence layer** | `redux-persist` for two preference fields would be rehydration machinery with no payoff. A two-key `store.subscribe` writer does it. → ADR 0004 |
+| **Authentication / login** | The brief starts at a signed-in merchant. A fake login screen would consume real time and demonstrate nothing being assessed. A fixed merchant marks where the session would attach *(as built, a constant `MERCHANT` in `src/app/merchant.ts`, not a slice)*. |
+| **Real routing beyond 3 views** | `react-router` is present for the views. *(Changed as built: there is one layout route for the dashboard, three pages — overview, transactions, send money — and no detail view. Pages load on demand since Phase 9, which took the main JavaScript from 215 to 166 kB gzipped; for the target phones on slow networks that proved worth it.)* |
+| **Redux persistence layer** | `redux-persist` for two preference fields would be rehydration machinery with no payoff. A small `store.subscribe` writer does it (one key, the theme). → ADR 0004 |
 | **Storybook** (stretch) | Highest cost of the four stretch goals and the lowest signal for a panel that will see the running app. Component boundaries are demonstrated by the tests instead. Cut first, and knowingly. |
 | **Offline write queue** | Out of scope per ADR 0014, and it needs UX design rather than code. Named as the top follow-up. |
 | **i18n** | Real for a West African product (Hausa, Yoruba, Igbo, Pidgin). No copy is hard-coded into logic, so it is addable, but a translation layer here would be scaffolding around one locale. |
@@ -51,10 +51,10 @@ this dashboard specifically:
   money. This is the real reason the `unknown` state in ADR 0006 is shown honestly rather than
   hidden behind a clean rollback — "we don't know yet, don't resend" is a disclosure
   obligation, not only a UX preference.
-- **Transaction references** are surfaced in the detail view, because that is what a merchant
+- **Transaction references** are shown on every row (there is no detail view), because that is what a merchant
   quotes when they call support or file a dispute.
-- **No PII in logs or error reports** — account numbers and names are redacted at the logging
-  boundary.
+- **No PII in logs or error reports** — *not built:* the app has no logging or error reporting, so there is no
+  boundary to redact at yet. Adding either would need it.
 
 ## Alternatives considered
 

@@ -48,7 +48,9 @@ that exist, rejecting `javascript:` and `data:`.
 **deliberately includes hostile rows** — a description containing `<script>alert(1)</script>`,
 one with an RTL override, one with zero-width joiners, one 5,000 characters long. They are
 visible in the running app, which turns this ADR from a claim into something the panel can see
-working. A component test asserts each renders as inert, visible text.
+working. A component test asserts each renders as inert, visible text *(added in Phase 9, when review found the claim had no
+test behind it: `src/features/transactions/TransactionRow.test.tsx` parses each hostile value through the contract and
+renders the row; rendering the description as HTML, or not stripping format characters, makes it fail)*.
 
 ## Alternatives considered
 
@@ -70,8 +72,8 @@ spoofing vector is closed. A reviewer can `grep dangerouslySetInnerHTML` and get
 *What it costs:* a legitimate name containing an unusual but valid character could be altered
 by normalisation. NFC plus a control-character strip is conservative enough that this is
 unlikely for Nigerian names, including Yoruba and Igbo diacritics, which NFC preserves. The
-truncation at 140 characters is a real information loss, mitigated by showing the full
-normalised text in the transaction detail view.
+truncation at 140 characters is a real information loss. *(The planned mitigation — the full text in a transaction
+detail view — was not built: there is no detail view, and text is cut to 140 characters at the API boundary.)*
 
 ## How we would know we were wrong
 

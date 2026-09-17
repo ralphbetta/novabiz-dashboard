@@ -79,6 +79,13 @@ draft ──► pending ─┼──────────────► fail
 
 ### The implementation
 
+*(The sketch below is the original design, kept for its reasoning. **As built it was split** (Phase 5 notes below):
+the `sendMoney` endpoint only patches the cache and undoes on a definite failure; the attempt's lifecycle — started,
+accepted, rejected, unknown — lives in the `sendTransfer` thunk (`src/store/sendTransfer.ts`), and reconciliation in the
+transfer tracker. Dispatching wizard actions from the endpoint, as sketched, let any caller take over the wizard; review
+caught it, and AGENT.md lists it as a known-bad pattern. Names differ too: `getTransactionsPage`, and
+`invalidatesTags` covers the recent-recipients list on success.)*
+
 The whole decision lives in one `onQueryStarted`, and the branch is the load-bearing line:
 
 ```ts

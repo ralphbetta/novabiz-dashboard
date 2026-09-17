@@ -60,4 +60,4 @@ reconciliation and the double-send protection, which is what the assessment is a
 
 **If you have an hour:** add 0003, 0005, 0008, 0011, 0013.
 
-**Before the panel:** all 15 plain-English files, then [../INTERVIEW-PREP.md](../INTERVIEW-PREP.md).
+**Before the panel:** all 18 plain-English files, then [../INTERVIEW-PREP.md](../INTERVIEW-PREP.md).

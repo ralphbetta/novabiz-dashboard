@@ -12,16 +12,32 @@ view of money coming into the wallet, and a way to send money out. Built for the
 
 | Phase | Scope | State |
 |---|---|---|
-| 0 | Scaffold, strict TypeScript, lint guards, test runner | ◐ Partly done |
+| 0 | Scaffold, strict TypeScript, lint guards, test runner | ✅ Done (Playwright added in Phase 8) |
 | 1 | Money module — kobo integers, formatting, parsing | ✅ Done |
 | 2 | MSW mock API — seeded ledger, pagination, idempotency, chaos controls, Mock API panel | ✅ Done (panel built after Phase 6) |
 | 3 | Data layer — Redux Toolkit store, RTK Query endpoints | ✅ Done; used by the dashboard screens |
 | 4 | Dashboard layout, balance summary, paginated transactions table | ✅ Done |
 | 5 | Send Money wizard — account lookup, recent recipients, optimistic send, settlement tracking | ✅ Done |
 | 6 | Reconciling transfers whose outcome is unknown | ✅ Done |
-| 7 | Offline banner, Send refused offline, no read retries offline, dark mode toggle | ◐ Built and tested; not yet reviewed |
-| 8 | Component + Playwright E2E tests | ✅ Done (705 unit and component tests; 11 Playwright tests at 360px and 1440px, including Phase 7's two) |
-| 9 | Docs, accessibility pass, polish | Not started |
+| 7 | Offline banner, Send refused offline, no read retries offline, dark mode toggle | ✅ Done |
+| 8 | Component + Playwright E2E tests | ✅ Done (714 unit and component tests; 19 Playwright tests at 360px and 1440px, including those added in Phases 7 and 9) |
+| 9 | Pages loaded on demand, browser accessibility suite, loading screen, screenshots, docs | ◐ Built and tested; not yet reviewed. The VoiceOver run is not done |
+
+## Screenshots
+
+| Dashboard | Transactions |
+|---|---|
+| ![Dashboard at 1440px: balance card, money in and out today, recent transactions](docs/screenshots/dashboard-desktop.png) | ![Transactions table at 1440px with direction, status and date filters](docs/screenshots/transactions-desktop.png) |
+| **Send Money: recipient** | **Send Money: review** |
+| ![Recipient step with account number, bank and a recent recipients panel](docs/screenshots/send-recipient-desktop.png) | ![Review step showing the verified name, full account number, amount and balance after](docs/screenshots/send-review-desktop.png) |
+| **Mock API panel** | |
+| ![Mock API controls: force the next transfer's outcome, settlement and network conditions](docs/screenshots/mock-api-panel-desktop.png) | |
+
+| Phone, dark mode | Transfer not yet confirmed | Offline |
+|---|---|---|
+| ![Dashboard at 360px in dark mode](docs/screenshots/dashboard-phone-dark.png) | ![Receipt saying the money may already have been sent and is being checked](docs/screenshots/receipt-unconfirmed-phone.png) | ![Offline banner and balance marked Offline as of the time it loaded](docs/screenshots/offline-phone.png) |
+
+Taken from the production build with Playwright; the phone shots are 360×800.
 
 ## Running it
 
@@ -48,7 +64,8 @@ npm run e2e         # Playwright, against a production build, at 360px and 1440p
 ```
 
 All six currently pass. `npm run e2e` needs a browser: `npx playwright install chromium` once, or run it with
-`PLAYWRIGHT_CHANNEL=chrome` to use an installed Google Chrome.
+`PLAYWRIGHT_CHANNEL=chrome` to use an installed Google Chrome. It runs two files: `e2e/send-money.spec.ts` and
+`e2e/accessibility.spec.ts` — 19 tests, 38 runs, 36 pass and 2 are skipped by design.
 
 To watch the tests run:
 
@@ -80,6 +97,12 @@ changes it optimistically, against the balance shown on screen:
 11. **Dark mode:** the choice applies at once and is still there after a reload — checked with the app's scripts blocked,
     so it comes from the pre-paint script, not a flash of light first.
 
+**What the accessibility suite covers** (`e2e/accessibility.spec.ts`), at both sizes: axe against WCAG 2.1 A and AA —
+**colour contrast included**, which jsdom cannot check — on the dashboard, transactions, the 404 page, every Send Money
+step (empty, bank list open, account not found, amount error, review), the receipt, the offline banner, the Mock API
+panel and the phone menu, in the light and the dark theme; focus moving to each page's heading after navigation; and
+Send Money completed with the keyboard alone, with a visible outline on each control it stops at.
+
 Which regressions each test was seen to catch — and one it did not — is recorded in
 [ADR-0011](docs/adr/ADR-0011-testing.md).
 
@@ -109,8 +132,8 @@ Run one, then send money from `/dashboard/send-money`:
   lists say "Offline · as of 14:32", and *Send* says why it will not send. The mock runs in a service worker, which
   still answers while the browser is offline, so what you see follows the browser's connection status rather than
   failed requests.
-- Any account number starting **999** shows "No account found". Chaos settings reset when the page reloads; the mock's
-  data does not (see below). Full reference:
+- Any account number starting **999** shows "No account found". Network settings and the mock's data are kept after a
+  reload; an armed outcome is not (see below). Full reference:
   [ADR-0005](docs/adr/ADR-0005-mock-api.md).
 
 ## What is built
@@ -175,6 +198,11 @@ no hand-written case had used an amount that large.
 - **Offline**: a banner under the top bar while the browser reports no connection; the balance and transaction lists stay
   readable, marked "Offline · as of 14:32"; *Send*, *Try again* and *Check status* stay focusable but refuse, with the
   reason shown. Nothing is queued to send later. → [ADR-0014](docs/adr/ADR-0014-offline-retry.md)
+- **Pages load on demand**: each page's code downloads when it is first opened. The router waits for it before changing
+  page, so focus still lands on the new heading. Main JavaScript: 166 kB gzipped, down from 215 kB.
+- **Loading screen**: a centred mark, name and thin progress bar, drawn by `index.html` before any script or stylesheet
+  arrives, in the saved theme, and held back 200 ms so a fast load never flashes it (shown at once, without motion, when
+  reduced motion is on).
 
 **Tests:** component tests with Testing Library and axe for the balance card (loading, error and retry, hide
 amounts, refresh announcements), pagination controls and range, recent transactions (loading, empty, error), `Select`,
@@ -269,10 +297,13 @@ The brief leaves these open; each is a judgement call, recorded so it can be cha
   `novabizMock.resetData()` in the console to start again from the seed. **Use one tab:** each tab keeps its own copy,
   and if two tabs both send money, the last to save wins (ADR-0005).
 - **Mock bank names are invented.** The account lookup stands in for a real name enquiry (ADR-0018).
-- **Accessibility is checked with axe in component tests, not a lint plugin.** `eslint-plugin-jsx-a11y` does not
-  support ESLint 10. axe in jsdom cannot check colour contrast, so a separate test checks the token pairs.
-- **No route lazy-loading yet.** The main JavaScript chunk is about 215 kB gzipped after Phase 7 (212 kB before it; 210 kB in a build without the mock, measured before Phase 7);
-  the Mock API panel and the mock itself load separately.
+- **Accessibility is checked with axe, not a lint plugin.** `eslint-plugin-jsx-a11y` does not support ESLint 10. axe
+  runs in component tests (jsdom, no contrast) and in the Playwright accessibility suite (a real browser, contrast
+  included).
+- **No screen reader run yet.** VoiceOver has not been used on the app. The custom Bank dropdown in particular is built
+  to the WAI-ARIA pattern and tested with axe and the keyboard, but not heard with a real screen reader (ADR-0017).
+- **Bundle:** pages load on demand; the main JavaScript is 166 kB gzipped. The mock (164 kB gzipped) loads separately,
+  at start, because it is the backend. Zod is still in the main chunk; `zod/mini` is not tried.
 
 ## Repository layout
 

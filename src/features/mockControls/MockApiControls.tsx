@@ -51,8 +51,8 @@ function MockApiControlsFor({ controls }: { controls: MockControls }) {
         aria-label={active > 0 ? `Mock API, ${active} ${active === 1 ? 'setting' : 'settings'} simulating failures` : 'Mock API'}
         className="px-3"
       >
-        <Icon name="sliders" className="size-4 text-fg-muted" />
-        {/* Short on phones, where the top bar is narrow. The accessible name comes from aria-label. */}
+        <Icon name="sliders" className="hidden size-4 text-fg-muted sm:block" />
+        {/* Short on phones, where the top bar is narrow: no icon, one word. The accessible name comes from aria-label. */}
         <span aria-hidden="true" className="sm:hidden">Mock</span>
         <span aria-hidden="true" className="hidden sm:inline">Mock API</span>
         {active > 0 ? (

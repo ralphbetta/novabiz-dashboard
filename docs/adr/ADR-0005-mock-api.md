@@ -193,8 +193,8 @@ open-transfer key, which would otherwise be checked against the fresh data. This
 *The mock supports one tab.* Each tab holds its own copy of the database and saves all of it to the same key. A tab
 only saves when its own data has changed, so a tab that merely reads cannot erase a transfer made in another; but if two
 tabs both write, the last to save wins, and a transfer from the other tab can be lost. Syncing tabs through the `storage`
-event was considered and not built: a mock does not need it, and a real server has one database. The chaos settings reset
-on reload. The saved data includes beneficiaries' full account numbers; in production that data lives on the bank's
+event was considered and not built: a mock does not need it, and a real server has one database. The network settings are kept
+across a reload (an armed outcome is not). The saved data includes beneficiaries' full account numbers; in production that data lives on the bank's
 servers, never in the browser.
 
 *Startup never leaves a blank page.* `index.html` shows a loading message from first paint, before any
@@ -210,8 +210,10 @@ refusing to register — asks for a reload.
 transfer may have written something, so the client must reconcile rather than roll back (ADR-0006).
 A test drives a crash through every endpoint.
 
-*Bundle cost — an open decision.* The mock chunk is ~523 kB minified (~188 kB gzipped), and startup
-waits for it before first render. By source size it is mostly zod (361 kB, which the app will need
+*Bundle cost — an open decision at the time.* *(Since resolved: the app renders without waiting for the mock — see
+"Startup never leaves a blank page" above — and the mock chunk measured 164 kB gzipped in the Phase 9 build. It still
+loads at start, because it is the only backend.)* The mock chunk was ~523 kB minified (~188 kB gzipped), and startup
+waited for it before first render. By source size it is mostly zod (361 kB, which the app will need
 anyway from Phase 3), msw (208 kB), and MSW's cookie handling via tldts and tough-cookie (257 kB),
 which this API does not use. Because the mock now ships in production builds, the target audience on
 slow connections pays this. Not yet resolved; see the implementation plan.

@@ -65,7 +65,8 @@ Against the same handlers the app uses, so a passing test means a working screen
   formatted naira amount matching the kobo integer submitted.
 - **Full keyboard traversal of the wizard**, driven by `user-event` with `Tab` and `Enter`
   only — never by clicking. A mouse-driven test cannot fail the way a keyboard user fails.
-- `jest-axe` assertion on every rendered screen.
+- An axe assertion on every rendered screen *(as built: `axe-core` directly, through `src/test/axe.ts`; `jest-axe` is
+  not used. Contrast is checked in the browser suite, `e2e/accessibility.spec.ts`)*.
 
 ### Layer 3 — E2E (Playwright), the flows that must never break
 
@@ -109,7 +110,8 @@ maintenance and catches nothing.
   `vite preview` (never a server left running, which would test old code), with a `desktop` (1440×900) and a `mobile`
   (360×800, touch) project, and no retries. Each test has a fresh browser context, so a mock starting from the seed.
   11 tests × 2 sizes = 22 runs: 20 pass, 2 skipped by design (flow 4 on mobile, the drawer test on desktop). The two
-  Phase 7 tests (offline, dark mode) were added after this phase.
+  Phase 7 tests (offline, dark mode) were added after this phase, and Phase 9 added `e2e/accessibility.spec.ts` (8
+  tests): 19 tests, 38 runs, 36 pass.
 - **Two kinds of money assertion.** The mock's ledger (fetched in the page, by idempotency key, in kobo) proves what the
   server recorded; the server's available balance moving by exactly one amount proves no second transfer under *any* key.
   Where the app changes money optimistically, the test also reads the **balance shown on screen**
@@ -143,7 +145,11 @@ Each change was made to the app, the named test run against a fresh build, and t
 | A new key on *Try again* (run in Phase 8's first pass) | 4 | Failed: the two POSTs carried different keys |
 | Phase 7: no offline check in the send thunk or on the Send button | offline | Failed: the tap went through and left the review step |
 | Phase 7: no pre-paint theme script in `index.html` | dark mode | Failed: no `dark` class after a reload with the app's scripts blocked (run again after review added `serviceWorkers: 'block'` and the `#root` check) |
-| Phase 7: the test's own script block removed | dark mode | Failed: `#root` held the rendered app, not the loading placeholder |
+| Phase 7: the test's own script block removed | dark mode | Failed: `#root` held the rendered app, not the loading placeholder (run again when the loading screen was redesigned in Phase 9) |
+| Phase 9: low-contrast muted text, both themes | accessibility | Failed: `color-contrast` on every page |
+| Phase 9: icon buttons without `aria-label` | accessibility | Failed: `button-name` |
+| Phase 9: route focus switched off | focus after navigation | Failed: heading not focused |
+| Phase 9: global `:focus-visible` outline removed | keyboard-only Send Money | Failed: focused control shows no outline |
 
 - **Browser:** Playwright's Chromium, or `PLAYWRIGHT_CHANNEL=chrome` for an installed Chrome. Playwright's download stalled
   on this network, so the Phase 8 runs used the installed Chrome. It has since finished; the Phase 7 review runs used

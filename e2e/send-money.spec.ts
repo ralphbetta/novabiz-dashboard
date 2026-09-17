@@ -294,8 +294,9 @@ test.describe('Dark mode (Phase 7)', () => {
     // Reload with every script file blocked: only index.html's inline script can set the class.
     await page.route('**/*.js', (route) => route.abort())
     await page.reload()
-    // Proof the app did not run: React replaces this placeholder as soon as it renders.
-    await expect(page.locator('#root')).toHaveText('Loading NovaBiz…')
+    // Proof the app did not run: React replaces index.html's loading screen as soon as it renders.
+    await expect(page.locator('#root > [data-app-loading]')).toBeVisible()
+    await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0)
     await expect(html).toHaveClass(/dark/)
   })
 })

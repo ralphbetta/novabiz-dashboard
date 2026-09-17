@@ -43,10 +43,11 @@ pasted negative shows an error instead of becoming a positive amount. Deleting t
 caret; removing only a comma removes the digit before it, handled on change because Android keyboards report keys as
 "Unidentified".)* Number inputs on Android surface an inconsistent keypad, silently accept
 `1e5`, and allow scroll-wheel changes on desktop — all three are wrong for a money field. The
-displayed value is formatted on blur; the parsed `Kobo` integer is what the schema validates.
+displayed value is formatted while typing (see the note above); the parsed `Kobo` integer is what the schema validates.
 
-**Server-side validation is authoritative.** The mock enforces the same rules, and the client
-surfaces server field errors in the same slots as client errors. The client's copy of the
+**Server-side validation is authoritative.** The mock enforces the same rules. *(As built, a
+server refusal is shown on the receipt with the server's message, not mapped back into the form's field slots; the
+merchant can edit the transfer from there.)* The client's copy of the
 rules is there for speed, not for trust.
 
 ### Accessibility specifics
@@ -58,7 +59,9 @@ rules is there for speed, not for trust.
   instead of leaving the user's focus stranded on a button that no longer exists;
 - the step indicator is `aria-current="step"`;
 - validation runs on blur and on submit, not on every keystroke — per-keystroke validation
-  makes a screen reader announce an error while the user is still typing the value.
+  makes a screen reader announce an error while the user is still typing the value. *(As built: `mode: 'onBlur'`, but
+  once a field shows an error it is re-checked on each change (`reValidateMode: 'onChange'`), so the error clears as
+  soon as the value is fixed.)*
 
 ## Alternatives considered
 

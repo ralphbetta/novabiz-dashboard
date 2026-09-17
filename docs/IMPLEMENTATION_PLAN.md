@@ -150,7 +150,7 @@ out loud if a panellist spots the name and assumes two data layers.
 
 ## 3. Phased build
 
-### Phase 0 — Foundation (≈1.5h) — ◐ partly done
+### Phase 0 — Foundation (≈1.5h) — ✅ done
 
 **Done:** Vite 8 + React 19 + TS 6 scaffold (React Compiler enabled). `strict`,
 `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`. ESLint `no-restricted-syntax` guards for
@@ -159,7 +159,7 @@ kobo conversion and `dangerouslySetInnerHTML`. Vitest.
 **Done since:** Tailwind v4, RTL + jsdom + axe-core (Phase 4); template README replaced and demo assets removed.
 `eslint-plugin-jsx-a11y` dropped — incompatible with ESLint 10; axe in component tests covers it.
 
-**Still to do:** Playwright with 360px / 1440px projects (Phase 8).
+**Done later:** Playwright with 360px / 1440px projects (Phase 8).
 
 ---
 
@@ -189,7 +189,8 @@ controller rather than a Redux preferences slice as ADR-0004 planned (see ADR-00
 (`MockApiControls.test.tsx`), the subscription (`chaosSubscribe.test.ts`), settings storage. Checked in Chrome at 1440 and
 360: arming "Timeout, money sent" from the panel, sending, the badge clearing, the receipt confirming then succeeding,
 the preset kept after a reload, focus back on the button after Escape. Cost at first: the main bundle grew from 207 to 215 kB
-gzipped, because the panel was imported statically — later lazy-loaded, bringing it to 212 kB. Found while checking it: skeleton placeholders meant to be round were square, because the default
+gzipped, because the panel was imported statically — later lazy-loaded, bringing it to 212 kB. (Phase 7 took it to 215 kB,
+and loading pages on demand in Phase 9 to 166 kB.) Found while checking it: skeleton placeholders meant to be round were square, because the default
 `rounded-md` beat the caller's `rounded-full` in Tailwind v4 — the same pitfall as button colours; fixed in `Skeleton`. Also
 found: a Phase 5 test that checked an error was gone from the whole page flickered, because the announcer's live region
 still (correctly) held the spoken message; it now checks inside the form, and still fails when the stale error returns. Reported
@@ -244,8 +245,8 @@ formatter — then broken on purpose):
 - [src/mocks/browser.ts](../src/mocks/browser.ts) + `main.tsx` — the worker starts before first render in
   every build unless `VITE_USE_MOCK=false`, and an insecure-context failure is reported plainly.
 - **Verified:** unit tests on the db; `msw/node` tests on every endpoint's status codes and contract
-  validity; production preview serves `mockServiceWorker.js`. **Not verified:** worker registration in
-  a real browser — no browser runner exists until Phase 8.
+  validity; production preview serves `mockServiceWorker.js`. *At the time* worker registration in a real browser was not
+  verified; the Phase 8 Playwright suite now runs against the real worker.
 - **Found by manual mutation checks** (see the note under Part 3): making every error claim `rejected: true` passed all tests, because
   nothing produced an `INTERNAL_ERROR`. That also exposed that a thrown exception returned MSW's
   non-contract 500 body. Both fixed and tested.
@@ -291,14 +292,16 @@ formatter — then broken on purpose):
   - `reset()` returned to the global defaults rather than the controller's own settings;
   - added a test and ADR note for latency beyond the client timeout reproducing the in-flight race;
   - renamed the handler helper `process` to `runWithChaos`, which no longer shadows Node's global.
-- **Not yet built, needs the Redux store:** panel UI, persisted settings, "Mock API" badge.
+- **Not yet built at this point:** panel UI, persisted settings, "Mock API" badge. *(All built after Phase 6; see the
+  Phase 2 heading note.)*
 - **Open decision for Phase 3 — two sources of truth.** ADR-0004 persists chaos settings in the
   preferences slice, but the controller holds its own copy, and `novabizChaos.update()` bypasses Redux.
   Recommended: the controller stays the runtime source of truth; the slice pushes into it with
   `update()` on load (before the first request) and on change; the panel reads back with `getSettings()`
   so console changes are not lost.
 
-**Open decision — mock bundle size.** ~523 kB minified / ~188 kB gzipped, awaited before first render,
+**Open decision at the time — mock bundle size.** *(Since resolved: the app renders without waiting for the mock, see
+Phase 4; the mock chunk is 164 kB gzipped in the Phase 9 build.)* ~523 kB minified / ~188 kB gzipped, awaited before first render,
 now shipped to production. Mostly zod (needed by the app anyway), msw, and MSW's unused cookie
 handling. Options recorded in the Part 2 review; to be decided before Phase 4 renders real UI.
 
@@ -475,7 +478,7 @@ Met, with the caveat above about real devices.
 
 ---
 
-### Phase 5 — Send Money wizard (≈4h) — ◐ built and tested; awaiting review
+### Phase 5 — Send Money wizard (≈4h) — ✅ done
 
 **Original plan:** four steps with RHF + Zod per-step schemas; amount as `inputMode="decimal"` text, formatted on
 blur, parsed via `parseNairaInput`; review shows the exact amount and full account number; focus to each step's
@@ -498,7 +501,7 @@ heading; optimistic update via `onQueryStarted`, with a naive "undo on any error
 - **Layout** redesigned after product-owner review: a side panel instead of stacked sections, a slim step row, no repeated
   page title, and sticky buttons on phones, so the main action is visible without scrolling at 1440×900 and 360×800.
 
-**Tested:** `SendMoneyWizard.test.tsx` (25, against the real mock server), `sendMoney.test.ts` (7, store level, every
+**Tested** (counts at the end of the phase): `SendMoneyWizard.test.tsx` (25, against the real mock server), `sendMoney.test.ts` (7, store level, every
 forced failure mode), `accounts.test.ts` (13, directory, name check, beneficiaries, handlers). The required cases —
 `0`, `0.00`, `-5`, `-₦1,000.00` each rejected with an announced error — are there. Key behaviours were broken on purpose to
 confirm a test fails.
@@ -546,7 +549,7 @@ again before the outcome is known — fixed after review, with a test.)
 
 ---
 
-### Phase 6 — Reconciliation (≈3h) ⭐⭐⭐ — ◐ built and tested; awaiting review
+### Phase 6 — Reconciliation (≈3h) ⭐⭐⭐ — ✅ done
 
 **Original plan:** four attempt states; undo only on a definite failure; on `unknown` keep the patches, label the row
 *Awaiting confirmation*, and reconcile in listener middleware with backoff (1/2/4/8s, capped at 30s, full jitter),
@@ -571,7 +574,7 @@ reuses the key; on reconnect, reconcile before anything refetches.
   UUID on start, and the attempt is restored as `unknown` without its details, then checked like any other. *Try again*
   is not offered for it: there is no request to send.
 
-**Tested:** `reconciliation.test.ts` (14, store level against the mock): found pending then settled; a slow POST that
+**Tested** (count at the end of the phase): `reconciliation.test.ts` (14, store level against the mock): found pending then settled; a slow POST that
 lands after lookups missed it; a bound rejection; misses never undo and end in needs attention; a lookup refused unsent is
 not a rejection; pause and resume offline and while hidden; reconnect checks before the balance refetches; *Check
 status*; *Try again* creates once or replays once; restored attempts; key persistence with storage that throws. Wizard
@@ -616,7 +619,7 @@ for `timeout-after-commit`.
 
 ---
 
-### Phase 7 — Resilience, dark mode, offline (≈2h) — ◐ built and tested; not yet reviewed
+### Phase 7 — Resilience, dark mode, offline (≈2h) — ✅ done
 
 Backoff with jitter for reads (done in Phase 3). Online/offline banner; Send disabled while offline with an
 explanation. Cached-data age label. (Reconcile-before-refetch on reconnect: done in Phase 6.) Dark mode toggle
@@ -629,7 +632,7 @@ as of" on the balance and transaction lists; a preferences slice with the theme 
 script in `index.html`, and a **Dark mode** button (top bar from 640px, phone menu below). Details in ADR-0014 and
 ADR-0010. The contrast test already covered both themes.
 
-**Tests:** 21 new unit and component tests (705 in all, including one added in review) and 2 Playwright tests (22 runs; 20 pass, 2 skipped). Each
+**Tests:** 21 new unit and component tests (705 in all at the end of the phase, including one added in review) and 2 Playwright tests (22 runs; 20 pass, 2 skipped). Each
 offline guard — send thunk, retry thunk, base query retries, Send button, Check status — and the pre-paint script was
 removed on purpose and a test was seen to fail.
 
@@ -673,12 +676,36 @@ time left.
 
 ---
 
-### Phase 9 — Documentation & polish (≈2h)
+### Phase 9 — Documentation & polish (≈2h) — ◐ built and tested; not yet reviewed
 
 README (see below). Finalise `AI_USAGE.md` from the log you've been keeping. Manual VoiceOver
 pass on the wizard and feed; record findings. Clean commit history. Verify `npm install &&
 npm run dev` from a **fresh clone in a clean directory** — not from your working copy, which
 has artefacts a clean clone won't.
+
+**Built:**
+- **Pages load on demand** through the router's `lazy` routes: main JavaScript 215 → 166 kB gzipped. `lazy`, not
+  `React.lazy`, so the page is loaded before the location changes and route focus still finds the heading.
+- **A browser accessibility suite** (`e2e/accessibility.spec.ts`, 8 tests at two sizes): axe with contrast on every page
+  and key state in both themes, focus after navigation, and Send Money by keyboard alone with visible focus. Each check
+  was seen to fail when the thing it guards was broken on purpose (ADR-0012, ADR-0011).
+- **A loading screen** in `index.html` (mark, name, thin progress bar; saved theme; reduced-motion aware; held back
+  200 ms), mirrored by the router's first-load fallback so React taking over changes nothing on screen. Asked for by the
+  product owner, replacing a plain "Loading NovaBiz…" line.
+- **README screenshots** (`docs/screenshots/`, eight, from the production build).
+
+**Found while building:** at 360px, "Send money" in the top bar wrapped onto two lines whenever the Mock API button
+showed a count — seen in a screenshot. The title now truncates rather than wraps, and on phones the button drops its
+icon; checked with the largest count (6) on the longest title.
+
+**Doc check:** every claim in the README, AGENT.md, AI_USAGE.md, this plan and the ADRs was checked against the code.
+About thirty were stale or overclaimed — the ADR-0006 code sample the build had moved away from, an `aria-required` and
+an amount-read-back that were never built, "chaos settings reset on reload", a missing file name, stale bundle figures.
+Each now says what was built, or is marked not built. One claim was made true instead: ADR-0013's test that hostile seed
+text renders as inert text did not exist; `TransactionRow.test.tsx` adds it (9 tests; 714 in all), and it fails when the
+row renders HTML or the sanitiser keeps format characters.
+
+**Not done:** the VoiceOver pass needs a person; a fresh-clone check and the commit history are the owner's.
 
 ---
 

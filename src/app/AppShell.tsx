@@ -124,8 +124,9 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
             <IconButton label="Open menu" onClick={openDrawer} className="-ml-2 lg:hidden">
               <Icon name="menu" />
             </IconButton>
-            <p className="text-base font-semibold text-fg">{title}</p>
-            <div className="ml-auto flex items-center gap-4">
+            {/* One line always: at 360px, with the Mock API count showing, a wrapped title pushed the bar's height. */}
+            <p className="min-w-0 truncate text-base font-semibold text-fg">{title}</p>
+            <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-4">
               <MockApiSlot />
               <div className="hidden sm:block"><ThemeToggle /></div>
               <span className="hidden h-6 w-px bg-border md:block" aria-hidden="true" />

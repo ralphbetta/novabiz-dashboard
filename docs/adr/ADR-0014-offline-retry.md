@@ -17,7 +17,7 @@ distinction is the whole decision.
 
 ### Reads (balance, transactions, reconciliation lookups)
 
-Automatic retry via RTK Query's `retry()` base-query wrapper, 3 attempts, exponential backoff
+Automatic retry, 3 attempts *(as built: the base query's own loop, not RTK Query's `retry()` wrapper — see Alternatives)*, exponential backoff
 with **full jitter**
 (`random(0, min(30s, 1s × 2^n))`). Jitter is not decoration: without it, every merchant whose
 connection drops on the same cell tower retries in lockstep and produces a thundering herd the
@@ -70,8 +70,9 @@ Built in Phase 3:
 - a 15s timeout per attempt, and a **30s overall deadline for a read** across all its attempts and backoff.
   Without the deadline the worst case was four 15s timeouts plus backoff: over a minute of spinner for a
   merchant on a poor connection. The last attempt's timeout is shortened to fit the deadline;
-- the feed refetches **only its first page** on reconnect (`refetchCachedPages: false`), rather than every page
-  the merchant scrolled through, one after another;
+- the feed refetched **only its first page** on reconnect (`refetchCachedPages: false`), rather than every page
+  the merchant scrolled through *(since replaced: the feed became a paged table, ADR-0016, so each page is its own
+  query and only pages on screen refetch)*;
 - the reconciliation lookup always goes to the server (`forceRefetch`), never a cached "pending".
 
 Built in Phase 6: reconcile-before-refetch on reconnect (the reconnect guard, ADR-0006).

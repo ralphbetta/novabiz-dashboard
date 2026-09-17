@@ -92,7 +92,8 @@ which is the hardest requirement in the brief.
   dates are stored as ISO strings and parsed at the edge, never as `Date` objects in state.
 - **Invalidation needs discipline.** A broad `invalidatesTags: ['Transactions']` after every
   send would refetch the whole feed on a 3G connection — a user-visible regression. The send
-  flow therefore **patches the cache** with `updateQueryData` and invalidates nothing. Tags are
+  flow therefore **patches the cache** with `updateQueryData` and invalidates nothing *(as built: nothing but the
+  small recent-recipients list, `Beneficiaries`, on success — ADR-0018)*. Tags are
   used for genuine cross-entity relationships only.
 - **RTK Query's infinite query support is newer** than TanStack Query's equivalent — see
   ADR 0008 for how we handle that, including the pre-2.8 fallback.
