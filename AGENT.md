@@ -260,6 +260,15 @@ here. If you are about to produce one, produce the alternative instead.
 | Announcing after an `await` without checking the component is still mounted | The announcer outlives the page, so the merchant hears about a page they left. |
 | `border-border-control` on an input | Below 3:1, and an empty input has no text to identify it. Inputs use `border-border-field`; `tokens.test.ts` enforces it. |
 | Computing a page's last row as `(page + 1) × size` | Pages are a cursor walk; the last page can be short even when the total grew. Use `pageRange`. |
+| A text field for the recipient's account name | The name comes from the account lookup and the server checks it. → `docs/adr/ADR-0018-account-lookup-and-beneficiaries.md` |
+| RHF `watch()` for values a component renders | Not compatible with the React Compiler's memoisation. Use `useWatch`. |
+| Relying on the button disappearing to stop a second send | Each duplicate carries a new idempotency key, so the key cannot catch it. Send through `sendTransfer`, which refuses while an attempt is open. Test double taps with back-to-back `fireEvent.click`s, not `user.dblClick`. |
+| Dispatching Send Money draft actions from the `sendMoney` endpoint | Any other caller would take over the wizard. The endpoint patches the cache; `sendTransfer` owns the attempt. |
+| `patch.undo()` without checking the entry was not refetched | Undo replays reverse patches onto the current cache: an old balance written back, a page's last row dropped. |
+| Writing a changed transaction into cached pages without re-checking their filters | A settled transfer would sit on a "pending" page. Remove it where it no longer matches (`applyTransferToCache`). |
+| Storing a validation message in state beside the thing it describes | It outlives the fix. Derive it from the current state plus a "Continue was pressed" flag. |
+| Showing the draft's typed text on the confirm screen | Show the built, sanitised request: that is what is sent (ADR-0013). |
+| Stacking side content (recents, summaries) above a form | Keep the main action above the fold: side panel on desktop, sticky buttons on phones. |
 | A module-level flag for "first render" | Breaks under StrictMode and across tests. Use a per-instance `useRef`. |
 
 ---

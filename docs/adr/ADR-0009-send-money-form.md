@@ -73,6 +73,35 @@ form values inferred from the schema; no re-render storm while typing.
 the client's. We mitigate that by exporting the schemas from a shared module that the MSW
 handlers import — the rules are literally the same objects, so they cannot drift.
 
+## Implementation notes (Phase 5)
+
+- **The recipient schema has no account name.** The merchant enters a number and bank; the name comes from the account
+  lookup and is checked again by the server. See [ADR-0018](ADR-0018-account-lookup-and-beneficiaries.md). The sketch
+  above predates that.
+- **Step schemas are built from the contract's own rules** (`src/features/send/schemas.ts`): the amount pipes the parsed
+  kobo into `SendMoneyRequestSchema.shape.amountKobo`, so "greater than zero" and the minimum are the same objects the
+  mock uses. The form adds only what the contract cannot know: the bank is listed, the text parses, and it fits the
+  balance on screen. `buildRequest` runs every rule again at confirm.
+- **An invalid submit** focuses the first invalid field and announces the problems assertively ("There are 2
+  problems. First: …"). Errors are linked with `aria-describedby` and set `aria-invalid`.
+- **The draft lives in the store** (ADR-0004), including the values being typed, so a live summary can show them and
+  leaving the page loses nothing.
+- **`useWatch`, not `watch`,** for values the component renders: `watch` is not compatible with the React Compiler's
+  memoisation.
+- **Layout, at the product owner's request:** the form with a side panel (recent recipients on step 1, a live summary on
+  step 2), a slim step row, no repeated page title, and buttons that stick to the bottom on phones, so the main
+  action never needs a scroll.
+- **Double send:** `sendTransfer` (src/store/sendTransfer.ts) refuses, sending nothing, while an attempt's outcome is
+  open, and `attemptStarted` refuses to replace an open attempt. The first version relied only on the Send button
+  disappearing before a second tap; review pointed out that each duplicate would carry a new key, so the idempotency key
+  would not catch it. Both guards are tested.
+- **Review shows what is sent:** the description comes from the built request (sanitised, ADR-0013), not from the draft,
+  which holds what was typed.
+- **Lookup errors are worked out, not stored:** the recipient step keeps only whether Continue was pressed, and derives
+  the message from the lookup's current state, so an error cannot outlive a successful Retry.
+- **Not the plan's "naive catch first".** The plan suggested rolling back on any error in Phase 5 and fixing it in
+  Phase 6. `AGENT.md` already lists that as a money-losing bug, so the definite-failure rule was built directly.
+
 ## How we would know we were wrong
 
 - Client and server validation disagree on a real input.

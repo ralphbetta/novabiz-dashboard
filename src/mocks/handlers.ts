@@ -10,6 +10,7 @@ import { http, HttpResponse, type HttpResponseResolver, type JsonBodyType } from
 import type { z } from 'zod'
 import {
   API,
+  AccountLookupQuerySchema,
   IDEMPOTENCY_HEADER,
   IdempotencyKeySchema,
   REJECTED_BY_CODE,
@@ -144,6 +145,16 @@ export function createHandlers(db: MockDb, { beforeProcessing, chaos }: HandlerO
       if (!query.success) return validationError(query.error, 'Invalid transaction query')
       return runWithChaos(request, false, () => ({ response: fromResult(db.listTransactions(query.data)) }))
     })),
+
+    http.get(`*${API.accountLookup}`, withErrorBoundary(({ request }) => {
+      const query = AccountLookupQuerySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams))
+      if (!query.success) return validationError(query.error, 'Invalid account lookup')
+      return runWithChaos(request, false, () => ({ response: fromResult(db.lookupAccount(query.data)) }))
+    })),
+
+    http.get(`*${API.beneficiaries}`, withErrorBoundary(({ request }) =>
+      runWithChaos(request, false, () => ({ response: fromResult(db.listBeneficiaries()) })),
+    )),
 
     http.post(`*${API.transfers}`, withErrorBoundary(async ({ request }) => {
       const key = IdempotencyKeySchema.safeParse(request.headers.get(IDEMPOTENCY_HEADER))

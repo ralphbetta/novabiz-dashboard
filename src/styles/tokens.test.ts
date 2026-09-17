@@ -88,6 +88,8 @@ const TEXT_PAIRS: [string, string][] = [
   ['brand', 'brand-fg'],
   ['debit', 'surface'],
   ['credit', 'surface'], ['credit', 'success-subtle'], ['credit', 'credit-subtle'],
+  // The verified-account panel: the name and bank on the credit tint.
+  ['fg', 'credit-subtle'], ['fg-muted', 'credit-subtle'],
   ['pending', 'surface'], ['pending', 'pending-subtle'],
   ['danger', 'canvas'], ['danger', 'surface'], ['danger', 'danger-subtle'],
 ]

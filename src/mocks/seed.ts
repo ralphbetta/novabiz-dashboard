@@ -18,6 +18,7 @@
  * all of today's rows share one — so createdAt alone is not a total order. Ids embed a zero-padded
  * chronological sequence number, which breaks every tie. Cursor pagination must key on the pair.
  */
+import { BANKS } from '../api/banks'
 import type { TransactionStatus, TransactionWire } from '../api/contracts'
 import { DAY_MS, calendarDate, startOfDay } from '../lib/time'
 import { createRng, type Rng } from './prng'
@@ -36,20 +37,6 @@ export const SEED_NEWEST_PENDING_COUNT = 3
 /** Width of the zero-padded sequence number in ids. Ids sort chronologically up to this many rows. */
 export const ID_SEQUENCE_DIGITS = 5
 
-/**
- * Illustrative bank list with CBN institution codes, for realistic counterparty data only.
- * Verify against a current NIBSS list before any real use.
- */
-export const BANKS = [
-  { code: '011', name: 'First Bank of Nigeria' },
-  { code: '044', name: 'Access Bank' },
-  { code: '058', name: 'Guaranty Trust Bank' },
-  { code: '033', name: 'United Bank for Africa' },
-  { code: '057', name: 'Zenith Bank' },
-  { code: '070', name: 'Fidelity Bank' },
-  { code: '232', name: 'Sterling Bank' },
-  { code: '035', name: 'Wema Bank' },
-] as const
 
 /**
  * Deliberately hostile descriptions (ADR-0013). They sit on the first page so they are visible in
@@ -94,16 +81,16 @@ const FIXTURE_POSITIONS = {
   diacriticName: 5,
 } as const
 
-const FIRST_NAMES = [
+export const FIRST_NAMES = [
   'Chinedu', 'Ngozi', 'Emeka', 'Adaeze', 'Tunde', 'Folake', 'Bola', 'Yetunde', 'Aminu', 'Zainab',
   'Musa', 'Hauwa', 'Ifeanyi', 'Kemi', 'Segun', 'Chiamaka', 'Ibrahim', 'Fatima', 'Oluwaseun', 'Uche',
   'Efe', 'Tamara', 'Blessing', 'Godwin',
 ] as const
-const LAST_NAMES = [
+export const LAST_NAMES = [
   'Okafor', 'Adeyemi', 'Bello', 'Eze', 'Abubakar', 'Okonkwo', 'Balogun', 'Olawale', 'Nwosu',
   'Danjuma', 'Etim', 'Okoro', 'Ogunleye', 'Yusuf', 'Obi',
 ] as const
-const SUPPLIERS = [
+export const SUPPLIERS = [
   'Kano Grains Depot', 'Oyingbo Foodstuff Traders', 'Alaba Electronics Wholesale', 'Aba Textile Hub',
   'Onitsha Market Supplies', 'Ikeja Packaging Co.',
 ] as const

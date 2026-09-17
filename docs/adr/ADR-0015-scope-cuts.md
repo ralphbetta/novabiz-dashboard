@@ -45,7 +45,8 @@ this dashboard specifically:
   `localStorage` (ADR 0004). That constraint changed a technical decision, which is the point.
 - **Account numbers** are masked (`••••4821`) everywhere except the review step, where the
   merchant must verify the full number before confirming. Masking it there would cause
-  mis-sends; showing it in the feed is needless exposure.
+  mis-sends; showing it in the feed is needless exposure. *(Recent recipients follow the same rule: masked in the
+  list, though the API returns the full number because it is needed to pay them again — ADR-0018.)*
 - **CBN consumer protection** expects a merchant to be able to tell what happened to their
   money. This is the real reason the `unknown` state in ADR 0006 is shown honestly rather than
   hidden behind a clean rollback — "we don't know yet, don't resend" is a disclosure

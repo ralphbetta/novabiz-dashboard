@@ -17,8 +17,8 @@ view of money coming into the wallet, and a way to send money out. Built for the
 | 2 | MSW mock API — seeded ledger, pagination, idempotency, chaos controls | ◐ Mock API complete; chaos panel UI, saved settings and "Mock API" badge pending (need the Phase 3 store) |
 | 3 | Data layer — Redux Toolkit store, RTK Query endpoints | ✅ Done; used by the dashboard screens |
 | 4 | Dashboard layout, balance summary, paginated transactions table | ✅ Done |
-| 5 | Send Money wizard | Not started |
-| 6 | Optimistic update reconciliation | Not started |
+| 5 | Send Money wizard — account lookup, recent recipients, optimistic send, settlement tracking | ◐ Built and tested; not yet reviewed |
+| 6 | Reconciling transfers whose outcome is unknown | Not started (the `unknown` state is shown; nothing checks it yet) |
 | 7 | Offline handling, retry, dark mode | Not started |
 | 8 | Component + Playwright E2E tests | Not started |
 | 9 | Docs, accessibility pass, polish | Not started |
@@ -33,7 +33,7 @@ npm run dev         # Vite dev server
 ```
 
 Open http://localhost:5173 — it redirects to `/dashboard`. The routes are `/dashboard` (overview),
-`/dashboard/transactions` and `/dashboard/send-money` (a placeholder until Phase 5). The mock API now starts automatically with the dev server — no second process — and also
+`/dashboard/transactions` and `/dashboard/send-money`. The mock API starts automatically with the dev server — no second process — and also
 in production builds, since there is no real backend
 ([ADR-0005](docs/adr/ADR-0005-mock-api.md)). Because it runs as a service worker, the app must be
 served from `localhost` or over HTTPS: opening the dev server from a phone via a LAN IP will not work.
@@ -62,10 +62,31 @@ novabizChaos.update({ latencyMs: 2000, errorRate: 0.2 })
 novabizChaos.reset()
 ```
 
-There is no UI to send a transfer yet (Phase 5), so for now these are exercised by the tests in
-`src/mocks/chaos.test.ts`. Full reference: [ADR-0005](docs/adr/ADR-0005-mock-api.md).
+Run one, then send money from `/dashboard/send-money` to see the result. `error-after-commit` or `timeout-after-commit`
+shows the "We couldn't confirm this transfer" state, with the balance still reduced. Any account number starting
+**999** shows "No account found". Settings reset when the page reloads. Full reference:
+[ADR-0005](docs/adr/ADR-0005-mock-api.md).
 
 ## What is built
+
+### Send Money — [src/features/send](src/features/send)
+
+- **Recipient:** pick a recent recipient (side panel on desktop, a row of avatars on phones) or enter an account number
+  and bank. The holder's name is looked up automatically and shown as verified; the merchant never types a name, and the
+  server refuses a transfer whose name does not match. → [ADR-0018](docs/adr/ADR-0018-account-lookup-and-beneficiaries.md)
+- **Amount:** a large text field with a decimal keypad, quick amounts, and a live summary of the balance after the
+  transfer. Zero, negative, malformed, below-minimum and over-balance amounts are refused with announced errors.
+- **Review:** the verified name, the full account number (the only place it appears) and the exact amount, with every
+  rule checked again. **Result:** a receipt that follows the transfer until it settles.
+- **Layout:** the main action is on screen without scrolling at 1440×900; on phones the buttons stick to the bottom.
+- **Optimistic send:** the balance drops and a pending row appears before the server answers. Only a definite rejection
+  undoes that; a timeout or server error keeps it and says the money may have been sent. The idempotency key is created
+  once per attempt. → [ADR-0006](docs/adr/ADR-0006-optimistic-send.md), [ADR-0007](docs/adr/ADR-0007-idempotency.md)
+
+**Tests:** the whole flow against the real mock server (validation and announcements, lookup found / not found /
+failed, recent recipients, focus, review re-checks, optimistic update, settlement, double tap, definite rejection,
+unknown outcome, leaving mid-transfer) and the store-level optimistic update for every forced failure mode.
+
 
 ### Money handling — [src/lib/money.ts](src/lib/money.ts)
 
@@ -155,7 +176,8 @@ simulated latency, a configurable failure rate, and deterministic "force the nex
 or time out" controls, so error paths can be demonstrated on demand. →
 [ADR-0005](docs/adr/ADR-0005-mock-api.md)
 
-**Optimistic send: four states, not two** *(not built — Phases 5–6; `isDefiniteFailure` is built)*. A timeout or `5xx` does not mean the transfer failed —
+**Optimistic send: four states, not two** *(partly built — the rollback rule, the `unknown` state and settlement
+tracking are built; reconciling an `unknown` transfer is Phase 6)*. A timeout or `5xx` does not mean the transfer failed —
 it may have gone through. So only an explicit rejection rolls back. An ambiguous outcome moves to
 an `unknown` state that keeps the balance reduced, tells the merchant not to resend, and reconciles
 against the server using the idempotency key. →
@@ -170,7 +192,11 @@ body. Replaced the planned infinite feed at the product owner's request. →
 custom accessible `Select`, instead of Radix. →
 [ADR-0010](docs/adr/ADR-0010-styling-responsive.md), [ADR-0017](docs/adr/ADR-0017-custom-select-and-native-dialog.md)
 
-The full set of 17 decisions is indexed in [docs/adr/](docs/adr/README.md).
+**Account names come from a lookup** *(built)*. The merchant enters a number and bank; the holder's name is looked
+up and verified, and checked again by the server. Recent recipients are one tap away. →
+[ADR-0018](docs/adr/ADR-0018-account-lookup-and-beneficiaries.md)
+
+The full set of 18 decisions is indexed in [docs/adr/](docs/adr/README.md).
 
 ## Assumptions
 
@@ -190,12 +216,12 @@ The brief leaves these open; each is a judgement call, recorded so it can be cha
 
 - **Not yet verified on a real low-end Android WebView:** the `₦` symbol fallback and `formatToParts`
   support. This is the strongest outstanding evidence gap for ADR-0002.
-- **Send Money must reject zero and negatives.** `parseNairaInput` accepts both by design. The
-  shared contract (`SendMoneyRequestSchema`) now rejects them with tests; the Phase 5 form must
-  surface that error accessibly.
+- **An `unknown` transfer is not checked yet.** The receipt tells the merchant not to resend and the reconnect refetch
+  is held back, but nothing asks the server what happened until Phase 6, and a page reload loses the attempt.
+- **Mock bank names are invented.** The account lookup stands in for a real name enquiry (ADR-0018).
 - **Accessibility is checked with axe in component tests, not a lint plugin.** `eslint-plugin-jsx-a11y` does not
   support ESLint 10. axe in jsdom cannot check colour contrast, so a separate test checks the token pairs.
-- **No route lazy-loading yet.** The main JavaScript chunk is about 176 kB gzipped.
+- **No route lazy-loading yet.** The main JavaScript chunk is about 207 kB gzipped since Send Money was added.
 
 ## Repository layout
 
@@ -208,14 +234,16 @@ src/mocks/seed.ts            Seeded data: 1,200 transactions, stable across time
 src/mocks/db.ts              Mock server state and business rules: ledger, pagination, idempotency
 src/mocks/handlers.ts        Mock API HTTP layer (MSW)
 src/mocks/chaos.ts           Chaos controls: latency, errors, timeouts, forced outcomes
+src/mocks/directory.ts       Mock bank directory: who holds an account (account-name lookup)
 src/mocks/browser.ts         Starts the mock as a service worker
-src/api/                     RTK Query API, base query (timeouts, retries), shared contracts
-src/store/                   Redux store factory and typed hooks
+src/api/                     RTK Query API, base query (timeouts, retries), shared contracts, bank list
+src/store/                   Redux store, Send Money draft slice, transfer tracker (follows a transfer until it settles)
 src/app/                     Router, dashboard layout, sidebar and top bar, route focus
 src/pages/                   One component per route
 src/features/balance/        Balance card and today's totals
 src/features/transactions/   Transactions table, filters, pagination, recent transactions
-src/components/ui/           Button, Icon, Select, Skeleton, StatusBadge
+src/features/send/           Send Money wizard: steps, account lookup, recent recipients, summary, receipt
+src/components/ui/           Avatar, Button, Icon, Select, Skeleton, StatusBadge, TextField
 src/components/feedback/     Screen-reader announcer, loading/empty/error message
 src/styles/index.css         Tailwind v4 entry and colour tokens (light and dark)
 src/**/*.test.ts(x)          Unit, property-based, contract, seed, lint-guard and component tests

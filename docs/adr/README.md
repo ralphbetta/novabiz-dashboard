@@ -51,6 +51,7 @@ reversed later we don't edit the old record — we write a new one that supersed
 | 0015 | Scope cuts | [ADR](ADR-0015-scope-cuts.md) | [plain](ADR-0015-scope-cuts.dummies.md) | ⭐ | Accepted |
 | 0016 | **Paginated transactions table** | [ADR](ADR-0016-paginated-transactions-table.md) | [plain](ADR-0016-paginated-transactions-table.dummies.md) | ⭐⭐ | Accepted |
 | 0017 | Custom Select and native dialog | [ADR](ADR-0017-custom-select-and-native-dialog.md) | [plain](ADR-0017-custom-select-and-native-dialog.dummies.md) | ⭐ | Accepted |
+| 0018 | **Account lookup and recent recipients** | [ADR](ADR-0018-account-lookup-and-beneficiaries.md) | [plain](ADR-0018-account-lookup-and-beneficiaries.dummies.md) | ⭐⭐ | Accepted |
 
 ## Reading order
 

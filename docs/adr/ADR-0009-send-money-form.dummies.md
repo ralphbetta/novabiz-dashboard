@@ -55,5 +55,8 @@ shared-schema trick above handles structurally.
 
 ## Say this
 
+*(Since built: you no longer type the recipient's name — the app looks it up. See
+[ADR-0018](ADR-0018-account-lookup-and-beneficiaries.dummies.md).)*
+
 > "One schema per step, composed and re-validated at confirm. And the mock server imports the
 > same schemas, so the two can't disagree."

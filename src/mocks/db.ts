@@ -11,15 +11,22 @@
  * forgotten every transfer and key created before it. A real server is durable; this one is not.
  */
 import {
+  type AccountLookupQuery,
+  type AccountLookupWire,
   type BalanceWire,
+  type BeneficiariesWire,
+  type BeneficiaryWire,
   type ErrorCode,
   type SendMoneyRequest,
   type TransactionQuery,
   type TransactionWire,
   type TransactionsPageWire,
 } from '../api/contracts'
-import { dayBounds, startOfDay } from '../lib/time'
-import { BANKS, SEED, SEED_TRANSACTION_COUNT, generateSeedTransactions, reference, rowRng, sequenceId } from './seed'
+import { DAY_MS, dayBounds, startOfDay } from '../lib/time'
+import { BANKS } from '../api/banks'
+import { sanitizeText } from '../lib/sanitize'
+import { KNOWN_ACCOUNTS, accountHolder } from './directory'
+import { SEED, SEED_TRANSACTION_COUNT, generateSeedTransactions, reference, rowRng, sequenceId } from './seed'
 
 export const DEFAULT_SETTLEMENT_DELAY_MS = 3000
 /** Pending seed rows settle this long after the mock starts, so they are visible first, then resolve. */
@@ -157,6 +164,26 @@ export function createMockDb(options: MockDbOptions) {
     }
   }
 
+  /**
+   * Payees the merchant has paid before, newest first. Seeded with the fixed directory accounts, paid on earlier days;
+   * every transfer the server accepts moves its recipient to the front.
+   */
+  const beneficiaries: BeneficiaryWire[] = Object.entries(KNOWN_ACCOUNTS).map(([key, accountName], index) => {
+    const [bankCode = '', accountNumber = ''] = key.split(':')
+    return { bankCode, accountNumber, accountName, lastPaidAt: new Date(now().getTime() - (index + 1) * DAY_MS).toISOString() }
+  })
+  const MAX_BENEFICIARIES = 12
+
+  function rememberBeneficiary(recipient: SendMoneyRequest['recipient'], at: Date) {
+    const existing = beneficiaries.findIndex((b) => b.bankCode === recipient.bankCode && b.accountNumber === recipient.accountNumber)
+    if (existing !== -1) beneficiaries.splice(existing, 1)
+    beneficiaries.unshift({ ...recipient, lastPaidAt: at.toISOString() })
+    beneficiaries.length = Math.min(beneficiaries.length, MAX_BENEFICIARIES)
+  }
+
+  /** Names match when they are the same once sanitised and compared without case. */
+  const sameName = (a: string, b: string) => sanitizeText(a).toLocaleLowerCase('en-NG') === sanitizeText(b).toLocaleLowerCase('en-NG')
+
   function computeBalance(): BalanceWire {
     const at = now()
     const dayStart = startOfDay(at).toISOString()
@@ -262,6 +289,20 @@ export function createMockDb(options: MockDbOptions) {
       const bank = BANKS.find((b) => b.code === request.recipient.bankCode)
       if (!bank) return reject(fail('VALIDATION_FAILED', 'Unknown bank', { 'recipient.bankCode': 'Select a bank' }))
 
+      // The name must be the one the recipient's bank holds (ADR-0018). The client shows the looked-up name, but the
+      // server does not trust the client to have done so.
+      const holder = accountHolder(bank.code, request.recipient.accountNumber)
+      if (holder === null) {
+        return reject(fail('VALIDATION_FAILED', 'No account was found with this number at this bank. Nothing was sent.', {
+          'recipient.accountNumber': 'No account found',
+        }))
+      }
+      if (!sameName(holder, request.recipient.accountName)) {
+        return reject(fail('VALIDATION_FAILED', 'The account name does not match this account. Nothing was sent.', {
+          'recipient.accountName': 'Does not match the account holder',
+        }))
+      }
+
       const { availableBalanceKobo } = computeBalance()
       if (request.amountKobo > availableBalanceKobo) {
         return reject(fail('INSUFFICIENT_FUNDS', 'Insufficient funds for this transfer. Nothing was sent.'))
@@ -289,7 +330,22 @@ export function createMockDb(options: MockDbOptions) {
       transactions.push(transfer)
       idempotency.set(idempotencyKey, { fingerprint, outcome: { kind: 'transfer', transferId: transfer.id } })
       settlements.set(transfer.id, { settlesAt: at.getTime() + settlementDelayMs, useHook: true })
+      rememberBeneficiary({ ...request.recipient, accountName: holder }, at)
       return { ok: true, value: { transfer: structuredClone(transfer), replayed: false } }
+    },
+
+    /** Name enquiry (ADR-0018): who holds this account? NOT_FOUND when nobody does. */
+    lookupAccount(query: AccountLookupQuery): Result<AccountLookupWire> {
+      if (!BANKS.some((b) => b.code === query.bankCode)) {
+        return fail('VALIDATION_FAILED', 'Unknown bank', { bankCode: 'Select a bank' })
+      }
+      const accountName = accountHolder(query.bankCode, query.accountNumber)
+      if (accountName === null) return fail('NOT_FOUND', 'No account was found with this number at this bank.')
+      return { ok: true, value: { ...query, accountName } }
+    },
+
+    listBeneficiaries(): Result<BeneficiariesWire> {
+      return { ok: true, value: { items: structuredClone(beneficiaries) } }
     },
 
     /**

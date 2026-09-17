@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
+import { useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type Ref } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
 
@@ -16,6 +16,13 @@ export interface SelectProps<T extends string | number> {
   className?: string
   labelClassName?: string
   triggerClassName?: string
+  /** For forms: marks the value invalid, and links the trigger to the element describing the error. */
+  invalid?: boolean
+  describedBy?: string | undefined
+  /** Called when focus leaves the trigger with the list closed. Form libraries validate here. */
+  onBlur?: () => void
+  /** The focusable trigger, so a form can move focus to this field when it is invalid. */
+  triggerRef?: Ref<HTMLDivElement>
 }
 
 const LIST_MAX_HEIGHT = 288
@@ -46,6 +53,10 @@ export function Select<T extends string | number>({
   className = '',
   labelClassName = 'mb-1 block text-xs font-medium text-fg-muted',
   triggerClassName = 'w-full',
+  invalid = false,
+  describedBy,
+  onBlur,
+  triggerRef: externalTriggerRef,
 }: SelectProps<T>) {
   const id = useId()
   const labelId = `${id}-label`
@@ -62,6 +73,7 @@ export function Select<T extends string | number>({
   const listRef = useRef<HTMLUListElement>(null)
   const typeahead = useRef<{ text: string; timer: ReturnType<typeof setTimeout> | undefined }>({ text: '', timer: undefined })
   const last = options.length - 1
+  useImperativeHandle(externalTriggerRef, () => triggerRef.current as HTMLDivElement, [])
 
   const openAt = (index: number) => {
     // The trigger's own landmark or dialog keeps the list inside a landmark, and inside a modal dialog's top layer.
@@ -200,13 +212,16 @@ export function Select<T extends string | number>({
         role="combobox"
         tabIndex={0}
         aria-labelledby={labelId}
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
+        onBlur={() => { if (!open) onBlur?.() }}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         aria-activedescendant={open ? optionId(activeIndex) : undefined}
         onClick={() => (open ? close() : openAt(selectedIndex))}
         onKeyDown={onKeyDown}
-        className={`flex min-h-11 cursor-pointer items-center justify-between gap-2 rounded-xl border bg-surface px-3 text-left text-sm text-fg select-none ${open ? 'border-accent' : 'border-border-control hover:border-border-strong'} ${triggerClassName}`}
+        className={`flex min-h-11 cursor-pointer items-center justify-between gap-2 rounded-xl border bg-surface px-3 text-left text-sm text-fg select-none ${open ? 'border-accent' : invalid ? 'border-danger' : 'border-border-control hover:border-border-strong'} ${triggerClassName}`}
       >
         <span className="truncate">{options[selectedIndex]?.label}</span>
         <Icon name="chevron-down" className={`size-4 text-fg-muted transition-transform ${open ? 'rotate-180' : ''}`} />

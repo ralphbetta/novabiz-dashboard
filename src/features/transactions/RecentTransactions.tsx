@@ -12,7 +12,8 @@ const RECENT_COUNT = 6
 /** The latest few transactions on the dashboard, with a link to the full, filterable table. */
 export function RecentTransactions() {
   const { currentData, error, isFetching, refetch } = useGetTransactionsPageQuery({ filters: {}, limit: RECENT_COUNT, cursor: null })
-  const rows = currentData?.items ?? []
+  // A transfer just sent is added to the top of this page before the server answers, so keep to the latest few.
+  const rows = (currentData?.items ?? []).slice(0, RECENT_COUNT)
   const now = new Date()
 
   return (

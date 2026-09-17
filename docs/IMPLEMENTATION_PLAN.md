@@ -441,28 +441,74 @@ Met, with the caveat above about real devices.
 
 ---
 
-### Phase 5 — Send Money wizard (≈4h)
+### Phase 5 — Send Money wizard (≈4h) — ◐ built and tested; awaiting review
 
-Four steps with RHF + Zod per-step schemas. Amount field as `inputMode="decimal"` text,
-formatted on blur, parsed via `parseNairaInput`. Review step shows the **exact** formatted
-amount and the **full** account number (ADR 0015). Focus moves to each step's heading on
-change. Live regions mounted from first render.
+**Original plan:** four steps with RHF + Zod per-step schemas; amount as `inputMode="decimal"` text, formatted on
+blur, parsed via `parseNairaInput`; review shows the exact amount and full account number; focus to each step's
+heading; optimistic update via `onQueryStarted`, with a naive "undo on any error" catch to be fixed in Phase 6.
 
-Optimistic update via `onQueryStarted` — two `updateQueryData` patches (balance down, pending
-row unshifted onto page 0), holding the returned patch results.
+**Built** (react-hook-form 7.88, @hookform/resolvers 5.9, approved by the product owner):
+- **Recipient step with account lookup and recent recipients** (ADR-0018), added after the product owner rejected a
+  typed account name. New endpoints `GET /api/accounts/lookup` and `GET /api/beneficiaries`; the mock directory
+  invents stable holders; numbers starting 999 are not found; the server refuses a mismatched name.
+- **Amount step:** large field, quick amounts, balance hint, live summary panel; zero, negative, malformed,
+  below-minimum and over-balance amounts refused with announced errors.
+- **Review:** verified name, full account number, exact amount, balance after; every rule checked again at confirm.
+- **Result receipt:** sending, on its way, successful, failed (rejected, or failed to settle), and couldn't confirm.
+- **Optimistic update** in `sendMoney.onQueryStarted`: the balance patch, plus a pending row on every cached first
+  page whose filters match. Accepted → the server's row replaces it. **Definite failure → undo. Anything else → keep, and
+  mark the attempt `unknown`.** The naive catch was not built: `AGENT.md` lists it as a money-losing bug.
+- **Transfer tracker** (listener middleware): follows an accepted transfer by idempotency key until it settles, updates
+  every cached row, refreshes the balance. Phase 6 extends it to `unknown` transfers.
+- **Draft slice** (`transferDraftSlice`): step, recipient, typed amount, and the attempt with its key; never persisted.
+- **Layout** redesigned after product-owner review: a side panel instead of stacked sections, a slim step row, no repeated
+  page title, and sticky buttons on phones, so the main action is visible without scrolling at 1440×900 and 360×800.
 
-**At this stage the catch block can be naive** (`patches.forEach(p => p.undo())`). Get the happy
-path working end to end first, then do Phase 6 deliberately as its own piece of work. Committing
-the naive version first is genuinely useful: the Phase 6 diff *is* the explanation of ADR 0006,
-and it's a good thing to have in the history when you walk the panel through it.
+**Tested:** `SendMoneyWizard.test.tsx` (25, against the real mock server), `sendMoney.test.ts` (7, store level, every
+forced failure mode), `accounts.test.ts` (13, directory, name check, beneficiaries, handlers). The required cases —
+`0`, `0.00`, `-5`, `-₦1,000.00` each rejected with an announced error — are there. Key behaviours were broken on purpose to
+confirm a test fails.
 
-**Done when:** you can send money, the row appears immediately, and it settles.
+**Found while building:**
+- The double-tap guard (a ref) could not be shown to do anything: sending swaps the step synchronously, so there is no
+  second button to press. Removed. (Review then pointed out the store-level gap below.)
+- Testing Library matches an element's own text, so "Account verified: <name>" split across a screen-reader span needs
+  the region's full text.
+- The announcer sets its message 50 ms after clearing it; tests must wait for it.
 
-**Also done when — required, not optional:** the amount schema has its own explicit rule that the
-amount is **greater than zero**, separate from the ₦100 minimum, with component tests submitting
-`0`, `0.00`, `-5` and `-₦1,000.00` and asserting each is rejected with an announced error.
-`parseNairaInput` accepts all four by design (ADR-0002), so if this check is missing, nothing else
-stops them.
+**Fixed after review of Phase 5** (each confirmed first by a failing test or probe, then broken on purpose):
+- A lookup error stayed on the account number after Retry verified it (and "wait for verification" after the lookup
+  finished). The message is now derived from the lookup state plus whether Continue was pressed.
+- A settled transfer stayed on a "pending"-filtered page. `applyTransferToCache` removes a row from pages it no
+  longer matches.
+- Reconnecting refetched the balance and pages over a transfer whose outcome was unknown, silently dropping the kept
+  change. `reconnectGuard` holds the reconnect refetch until the outcome is known or the merchant starts over.
+- A definite rejection undid the optimistic patches over data refetched mid-flight, writing back an old balance and
+  dropping a page's last row. Undo now runs only on entries not refetched since the patch.
+- Review showed the typed description, not the sanitised one that is sent.
+- Nothing in the store stopped a second send (a probe showed two POSTs with different keys). `sendTransfer` refuses
+  while an attempt is open; `attemptStarted` refuses to replace one.
+- The endpoint drove the wizard (it dispatched the draft's actions). The attempt lifecycle moved to the `sendTransfer`
+  thunk; the tracker listens to the endpoint, so it follows any accepted transfer.
+- The tracker gave up silently while the receipt kept saying "a few seconds". It now marks the attempt, the receipt
+  says "taking longer than usual", and screen readers hear it — the first version of that fix did not announce,
+  because announcements were keyed on the status alone.
+- Wording: "the money is now in their account" became "the bank has confirmed this transfer"; a failure reason is
+  always one sentence; the recent-recipients row spans the card at every width.
+
+**Not done, and why it is not in Phase 5:** reconciling an `unknown` transfer (polling by key with backoff, pausing
+offline, "needs attention", *Try again* with the same key) and keeping the in-flight key in `sessionStorage`. That is
+ADR-0006's core and is graded on its own, so it is a separate phase whose diff reads as that ADR. Phase 5 makes the
+`unknown` state honest in the meantime: nothing is rolled back, the merchant is told not to resend, and a reconnect
+cannot overwrite the kept change. A reload loses the key until Phase 6. A Playwright run is Phase 8.
+
+**Known gap until Phase 6:** an `unknown` attempt only ends when the merchant presses *Start a different transfer*. A
+merchant who goes to the dashboard instead keeps the reconnect hold for the rest of the session, so later reconnects do
+not refresh the balance or the table. Reconciliation removes this. (A held reconnect is dropped if the connection goes
+again before the outcome is known — fixed after review, with a test.)
+
+**Done when:** you can send money, the row appears immediately, and it settles. Met, and checked in Chrome at 1440 and
+360, including the not-found and couldn't-confirm states.
 
 ---
 

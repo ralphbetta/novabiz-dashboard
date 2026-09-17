@@ -1,20 +1,16 @@
 import { usePageTitle } from '../app/pageTitle'
-import { PageHeader } from '../app/PageHeader'
-import { StateMessage } from '../components/feedback/StateMessage'
+import { SendMoneyWizard } from '../features/send/SendMoneyWizard'
 
-/** The route exists now; the Send Money form arrives in Phase 5. Said plainly rather than showing a fake form. */
+/**
+ * The page heading is for screen readers only: the top bar already shows "Send money", and repeating it on screen
+ * would push the form's main action below the fold. It still takes focus on arrival (RouteFocus).
+ */
 export function SendMoneyPage() {
   usePageTitle('Send money')
   return (
     <>
-      <PageHeader title="Send money">
-        Pay a supplier or send money to any Nigerian bank account.
-      </PageHeader>
-      <div className="rounded-3xl border border-border bg-surface">
-        <StateMessage icon="send" title="Sending money is coming next">
-          This is where you&rsquo;ll pay suppliers and transfer to any bank. It isn&rsquo;t available yet.
-        </StateMessage>
-      </div>
+      <h1 tabIndex={-1} className="sr-only">Send money</h1>
+      <SendMoneyWizard />
     </>
   )
 }

@@ -20,6 +20,8 @@ export const API = {
   balance: '/api/balance',
   transactions: '/api/transactions',
   transfers: '/api/transfers',
+  accountLookup: '/api/accounts/lookup',
+  beneficiaries: '/api/beneficiaries',
 } as const
 
 export const IDEMPOTENCY_HEADER = 'Idempotency-Key'
@@ -165,6 +167,42 @@ export const BalanceSchema = z.object({
 })
 
 // ---------------------------------------------------------------------------
+// Account lookup (name enquiry) and beneficiaries
+// ---------------------------------------------------------------------------
+
+/** GET /api/accounts/lookup — which account holder a number at a bank belongs to (ADR-0018). */
+export const AccountLookupQuerySchema = z.object({
+  accountNumber,
+  bankCode: z.string().regex(/^\d{3,6}$/, 'Select a bank'),
+})
+
+/**
+ * The verified holder of an account. The name comes from the recipient's bank, so it is UNTRUSTED text and sanitised
+ * (ADR-0013). The merchant never types it: a transfer carries this name, and the server checks it again.
+ */
+export const AccountLookupSchema = z.object({
+  accountNumber,
+  bankCode: z.string().regex(/^\d{3,6}$/),
+  accountName: untrustedText.pipe(z.string().min(1)),
+})
+
+/**
+ * Someone the merchant has paid before. Carries the full account number: it is the merchant's own saved payee, and
+ * is needed to pay them again (ADR-0015, ADR-0018).
+ */
+export const BeneficiarySchema = z.object({
+  accountNumber,
+  bankCode: z.string().regex(/^\d{3,6}$/),
+  /** UNTRUSTED: the verified name as the recipient's bank returned it. Sanitised. */
+  accountName: untrustedText.pipe(z.string().min(1)),
+  lastPaidAt: utcTimestamp,
+})
+
+export const BeneficiariesSchema = z.object({
+  items: z.array(BeneficiarySchema),
+})
+
+// ---------------------------------------------------------------------------
 // Send Money
 // ---------------------------------------------------------------------------
 
@@ -271,6 +309,14 @@ export type TransactionQuery = z.output<typeof TransactionQuerySchema>
 
 export type Balance = z.output<typeof BalanceSchema>
 export type BalanceWire = z.input<typeof BalanceSchema>
+
+export type AccountLookupQuery = z.output<typeof AccountLookupQuerySchema>
+export type AccountLookup = z.output<typeof AccountLookupSchema>
+export type AccountLookupWire = z.input<typeof AccountLookupSchema>
+export type Beneficiary = z.output<typeof BeneficiarySchema>
+export type BeneficiaryWire = z.input<typeof BeneficiarySchema>
+export type Beneficiaries = z.output<typeof BeneficiariesSchema>
+export type BeneficiariesWire = z.input<typeof BeneficiariesSchema>
 
 export type SendMoneyRequest = z.output<typeof SendMoneyRequestSchema>
 export type SendMoneyRequestWire = z.input<typeof SendMoneyRequestSchema>

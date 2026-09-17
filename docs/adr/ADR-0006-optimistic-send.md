@@ -205,6 +205,19 @@ attention* state with a manual *Check status* action rather than spinning foreve
 Putting this in middleware rather than a `useEffect` is deliberate: reconciliation is a property
 of the *transfer*, not of any screen that happens to be mounted.
 
+## Implementation notes (Phase 5)
+
+- **Who does what.** `sendMoney.onQueryStarted` patches the cache only: the balance, and every cached first page whose
+  filters match. `sendTransfer` (src/store/sendTransfer.ts) owns the attempt: refuses while one is open, records it,
+  and maps the answer to accepted, rejected or unknown with `isDefiniteFailure`. `transferTracker` listens to the
+  endpoint and follows any accepted transfer until it settles, then marks the attempt if it gives up.
+- **Undo only what is still ours.** A patch is undone on a definite failure only if its cache entry has not been
+  refetched since; a refetched entry already holds the server's copy, which never included the refused transfer.
+- **Rows leave pages they no longer match** when their status changes.
+- **Reconnect waits.** `reconnectGuard` holds RTK Query's `onOnline` while an attempt is sending or unknown, and releases
+  it when the outcome is known or the merchant starts over. Phase 6 replaces the wait with reconciling first.
+- **Not yet:** reconciling `unknown` (Phase 6). Until then the state is honest but does not resolve itself.
+
 ## Alternatives considered
 
 **`try { await queryFulfilled } catch { patchResult.undo() }`.** The documented pattern.

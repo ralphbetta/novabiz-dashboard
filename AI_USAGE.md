@@ -301,6 +301,24 @@ transaction row could show the same amount differently.
   finding was confirmed by a failing test before the fix, and each fix was broken on purpose afterwards. One new test
   first failed for the wrong reason (the first ArrowDown only opens the dropdown), which was corrected before it
   counted.
+- **A Send Money form that no bank would ship.** The model's first recipient step asked the merchant to type the
+  account name, and its first layout stacked recent recipients, a page title, a subtitle and a large progress block
+  above the form, so Continue and Send were below the fold at 1440×900. Both were caught by the product owner, not the
+  model: "we can't be asking users to type in account name" and "you don't expect users to scroll down to make
+  transfer". **Fix:** an account lookup with a server-side name check (ADR-0018), and a layout with a side panel and
+  sticky phone buttons, checked by screenshot at both sizes. When the product owner mentioned Paystack, the model
+  explained that its secret key cannot be put in the browser before building anything; the product owner then chose to
+  keep the mock.
+- **Tests written for a guard that did nothing.** A ref guard against a double tap on Send passed its test with and
+  without the guard: sending swaps the step before a second tap can land. Found by breaking the code on purpose; the
+  guard was removed and the test rewritten to prove the mechanism that actually prevents it.
+- **Phase 5 bugs found by review, not by the model's own tests.** An error that stayed on a field after Retry fixed it; a
+  settled transfer left on a "pending" page; a reconnect refetch that could overwrite the optimistic change the whole
+  design exists to keep; an undo replayed onto refetched data; a confirm screen showing unsanitised text; no store-level
+  guard against a second send; and the API endpoint driving the wizard's state. The model had claimed the double tap
+  was covered, and it was — at the button — but not where a duplicate would get past the idempotency key. Each was
+  confirmed by a failing test or probe before the fix and broken on purpose afterwards. Fixing the "tracking gave up"
+  message surfaced one more bug of the same kind: announcements keyed on status alone missed it.
 - **A stale code sample.** The implementation plan's Phase 1 section still held the buggy fallback
   from §3.1 after the source was fixed. The sample was removed and replaced with links to the real
   files.
